@@ -144,6 +144,11 @@ Panel diagnostics currently includes:
 
 - Local `index.html`, `styles.css`, `app.js`.
 - No CDN.
+- Simplified Chinese panel UI.
+- Beginner-friendly helper cards for first-use flow, rule creation, diagnostics, node onboarding, users, and TOTP.
+- Chinese status labels for node state, rule enabled/apply state, firewall mode, probes, and user roles.
+- Field-level help text for rule creation and node onboarding.
+- Refined local CSS visual design with responsive layout, local font stack, status colors, drawer/toast/page animations, and no external assets.
 - Pages:
   - login
   - dashboard
@@ -219,9 +224,10 @@ Commands that passed:
 
 ```bash
 node --check web/app.js
+node --check web/qr.js
+node -e "brace check for web/styles.css and web/app.js"
 sh -n scripts/install-panel.sh
 sh -n scripts/install-agent.sh
-node --check web/qr.js
 CGO_ENABLED=1 go test ./...
 CGO_ENABLED=1 go vet ./...
 make all
@@ -290,6 +296,12 @@ Additional checks:
   - `relaycore-agent rescue` removed `table ip relaycore` and tolerated missing `table inet relaycore_guard`.
   - strict mode was verified with real Panel confirmation; node reported `strict`.
   - strict public TCP forwarding to local and external targets worked.
+- Debian 12 public UI preview:
+  - Panel kept publicly reachable at `http://83.228.227.152:10028` for user review.
+  - Latest local CSS/JS UI assets deployed with the release archive.
+  - Public HTTP check returned `200`.
+  - Public `styles.css` confirmed the new local CSS design.
+  - Public `app.js` confirmed the Simplified Chinese beginner guidance.
 - Full rule loop verified:
   - Panel created rule.
   - Agent pulled rule.
@@ -310,16 +322,19 @@ Last rule-loop validation result:
 - nftables forwarding is IPv4 only.
 - UDP probe can only confirm send-path basics, not true application-layer response.
 - flowtable acceleration is not implemented.
+- UI visual review is pending user feedback from the Debian public preview.
 - Disposable VPS validation has been done on Ubuntu 24.04 and Debian 12; more firewall stacks should still be tested before broad production rollout.
 
 ## Next Recommended Steps
 
-1. Broaden integration testing:
+1. Review the updated Simplified Chinese UI on the Debian preview panel and adjust spacing, wording, or workflow pain points from feedback.
+
+2. Broaden integration testing:
    - Ubuntu without Docker/1Panel
    - a node with native nftables-only firewall chains
    - target behind private network/VPN
 
-2. Evaluate flowtable acceleration:
+3. Evaluate flowtable acceleration:
    - detect kernel/nft support
    - keep disabled by default
    - document risk and rollback
