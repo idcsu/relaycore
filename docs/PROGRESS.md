@@ -421,6 +421,24 @@ Last rule-loop validation result:
 
 4. `README.md`：新增 Panel 管理脚本和 Agent 管理脚本的使用说明。
 
+### 2026-06-18：版本号从 tag 自动注入
+
+问题：
+
+版本号硬编码在 `internal/common/models.go` 的 `const Version = "0.1.0"` 中，每次发版需要手动改代码才能更新版本号。v0.1.1 首次发版时遗漏了这一步，导致二进制虽然是从 v0.1.1 tag 构建的，但 `-version` 仍输出 0.1.0。
+
+改动：
+
+1. `internal/common/models.go`：`Version` 从 `const` 改为 `var`，默认值 `"dev"`（未注入时的兜底）。
+2. `Makefile`：新增 `LDFLAGS := -X relaycore/internal/common.Version=$(VERSION)`，panel 和 agent 编译时通过 `-ldflags` 注入版本号。
+3. `scripts/build-release.sh`：构建 release 包时同样通过 `-ldflags` 注入 `VERSION`。
+
+效果：
+
+- CI 打 tag（如 `v0.2.0`）时，workflow 提取 `${GITHUB_REF_NAME#v}` 得到 `0.2.0`，传给 `make release VERSION=0.2.0`，编译时注入到二进制。
+- 本地开发不传 VERSION 时默认显示 `dev`。
+- 以后发版只需 `git tag vX.Y.Z && git push origin vX.Y.Z`，不再需要手动改代码。
+
 ## Next Recommended Steps
 
 1. Review the updated Simplified Chinese UI on the Debian preview panel and adjust spacing, wording, or workflow pain points from feedback.
