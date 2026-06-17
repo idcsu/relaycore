@@ -369,13 +369,13 @@ Last rule-loop validation result:
 
 问题：
 
-1. Modal 弹窗（新增规则、编辑规则、节点设置等）在中等屏幕宽度下显示不全，半边屏幕被遮挡。
+1. Modal 弹窗（新增规则、编辑规则、节点设置等）半边屏幕被遮挡，显示不全。
 2. Drawer 抽屉（节点详情、规则详情）在中小屏幕上宽度过大，内容被遮挡。
 3. 节点详情和规则详情中的 Ruleset 片段/预览内容过长时显示不全，无法滚动查看。
 
 原因：
 
-- `.modal` 缺少 `margin: auto`，在 flex 容器中弹窗未能正确居中，内容高时顶部对齐导致遮挡。
+- **根因**：`.content` 上有 `animation: fadeUp 0.24s ease-out both`，fadeUp 动画的 `to` 状态包含 `transform: translateY(0)`。`both` 填充模式让动画结束后永久保留 `transform: translateY(0)`，导致 `.content` 成为 `position: fixed` 子元素（`.modal-backdrop`、`.drawer-backdrop`）的包含块。fixed 定位不再相对于视口，而是相对于 `.content`（在 268px 侧边栏右侧），弹窗因此被限制在主内容区宽度内，左半边被侧边栏遮挡。
 - 980px 中等宽度断点缺少对 `.modal-backdrop` padding 和 `.drawer` 宽度的响应式调整。
 - 720px 小屏断点缺少 `.drawer` 全宽规则。
 - `.codebox` 在 Drawer 内使用时没有 `max-height` 和 `overflow` 限制，长内容撑开整个抽屉。
@@ -386,6 +386,7 @@ Last rule-loop validation result:
 2. 980px 断点新增：`.modal-backdrop` padding 从 `40px 20px` 减至 `24px 12px`；`.drawer` 宽度从 `min(760px, 100%)` 减至 `min(560px, 100%)`。
 3. 720px 断点新增：`.drawer` 宽度设为 `100%`（全宽）。
 4. 新增 `.drawer .codebox { max-height: 320px; overflow: auto; }` — 抽屉内的代码片段限高 320px 并支持滚动。
+5. **根因修复**：新增 `@keyframes fadeIn`（仅 opacity，不含 transform），`.content` 改用 `fadeIn` 替代 `fadeUp`，消除 `transform: translateY(0)` 对 fixed 定位的影响。弹窗和抽屉现在正确相对于视口定位，不再被侧边栏遮挡。
 
 已重新构建前端，产物输出到 `web/`。
 
