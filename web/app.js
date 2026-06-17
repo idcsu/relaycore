@@ -11,9 +11,11 @@ const state = {
   tokens: [],
   users: [],
   events: [],
+  eventCategory: "all",
   totpSetup: null,
   selectedRuleID: null,
   selectedNodeID: null,
+  editingRuleID: null,
   userResult: null
 };
 
@@ -106,6 +108,97 @@ function severityText(severity) {
   return severity || "提示";
 }
 
+function firewallText(mode) {
+  if (mode === "strict") return "严格防火墙";
+  if (mode === "strict_pending") return "严格确认中";
+  if (mode === "managed") return "托管防火墙";
+  return mode || "托管防火墙";
+}
+
+function trafficSummary() {
+  const byRule = new Map();
+  const byProtocol = { tcp: 0, udp: 0, other: 0 };
+  let bytes = 0;
+  let packets = 0;
+  for (const c of state.counters) {
+    const b = Number(c.bytes || 0);
+    const p = Number(c.packets || 0);
+    bytes += b;
+    packets += p;
+    const proto = c.protocol === "tcp" || c.protocol === "udp" ? c.protocol : "other";
+    byProtocol[proto] += b;
+    const item = byRule.get(c.rule_id) || { rule_id: c.rule_id, bytes: 0, packets: 0 };
+    item.bytes += b;
+    item.packets += p;
+    byRule.set(c.rule_id, item);
+  }
+  const topRules = [...byRule.values()]
+    .map(item => ({ ...item, rule: state.rules.find(r => r.id === item.rule_id) }))
+    .sort((a, b) => b.bytes - a.bytes)
+    .slice(0, 5);
+  return { bytes, packets, byProtocol, topRules };
+}
+
+function eventCategory(action) {
+  if (String(action).startsWith("auth.") || String(action).startsWith("account.")) return "认证";
+  if (String(action).startsWith("user.")) return "用户";
+  if (String(action).startsWith("node") || String(action).startsWith("node_token")) return "节点";
+  if (String(action).startsWith("rule.")) return "规则";
+  if (String(action).startsWith("system.")) return "系统";
+  return "其他";
+}
+
+function eventActionText(action) {
+  const map = {
+    "system.bootstrap": "初始化管理员",
+    "auth.failed": "登录失败",
+    "auth.login": "登录成功",
+    "account.totp": "两步验证变更",
+    "user.create": "创建用户",
+    "user.update": "更新用户",
+    "user.reset_password": "重置密码",
+    "node_token.create": "生成节点接入 Token",
+    "node.register": "节点注册",
+    "node.update": "更新节点",
+    "node.delete": "删除节点",
+    "rule.save": "保存规则",
+    "rule.delete": "删除规则"
+  };
+  return map[action] || action || "-";
+}
+
+function eventTargetText(target) {
+  if (!target) return "-";
+  const [kind, id] = String(target).split(":");
+  if (kind === "user") return `用户：${userName(id)}`;
+  if (kind === "node") return `节点：${state.nodes.find(n => n.id === id)?.name || id}`;
+  if (kind === "rule") return `规则：${state.rules.find(r => r.id === id)?.name || id}`;
+  if (kind === "node-token") return "节点接入 Token";
+  if (target === "session") return "登录会话";
+  return target;
+}
+
+function eventDetailText(detail) {
+  const text = String(detail || "");
+  if (!text) return "-";
+  if (text === "created initial administrator") return "创建初始管理员";
+  if (text === "session created") return "创建登录会话";
+  if (text.startsWith("login failed at ")) return "登录失败：" + text.replace("login failed at ", "");
+  if (text.startsWith("created user ")) return "创建用户：" + text.replace("created user ", "");
+  if (text.startsWith("role=")) {
+    return text.replace("role=", "角色=").replace(" disabled=", "，禁用=");
+  }
+  if (text === "password reset") return "密码已重置";
+  if (text === "created node token") return "生成节点接入 Token";
+  if (text === "agent registered") return "Agent 注册成功";
+  if (text === "saved forwarding rule") return "保存转发规则";
+  if (text === "deleted forwarding rule") return "删除转发规则";
+  if (text.startsWith("updated node ")) return "更新节点：" + text.replace("updated node ", "");
+  if (text.startsWith("deleted node and ")) return text.replace("deleted node and ", "删除节点，并移除 ").replace(" rule(s)", " 条规则");
+  if (text.startsWith("totp enabled=")) return text.endsWith("true") ? "两步验证已启用" : "两步验证已停用";
+  return text;
+}
+
 function toast(message, tone = "") {
   const el = document.createElement("div");
   el.className = `toast ${tone}`;
@@ -134,7 +227,6 @@ function renderLogin() {
           <div>
             <div class="brand-mark">RC</div>
             <h1>RelayCore</h1>
-            <p>轻量端口转发控制台</p>
           </div>
           <div class="login-points">
             <span>适合 1 核 1G 节点</span>
@@ -193,7 +285,7 @@ async function refreshAll() {
   if (state.page === "tokens") {
     state.tokens = (await api("/api/node-tokens")).items || [];
   }
-  if (isAdminRole(state.user?.role) && (state.page === "users" || state.page === "rules")) {
+  if (isAdminRole(state.user?.role) && (state.page === "users" || state.page === "rules" || state.page === "events")) {
     state.users = (await api("/api/users")).items || [];
   }
   if (state.page === "events") {
@@ -308,6 +400,7 @@ function fieldHelp(text) {
 function renderDashboard() {
   const d = state.dashboard || {};
   const findings = d.findings || [];
+  const traffic = trafficSummary();
   return `
     ${helperCard("第一次使用按这个顺序来", "先接入节点，再新增转发规则，最后用诊断中心确认访问路径是否正常。", [
       { title: "接入节点", detail: "到“节点接入”生成命令，在转发服务器上执行一次即可。" },
@@ -320,6 +413,7 @@ function renderDashboard() {
       ${metric("风险提示", findings.length, "来自节点指标和诊断")}
       ${metric("转发模式", "nftables", "默认走 Linux 内核路径")}
     </div>
+    ${renderTrafficPanel(traffic)}
     <div class="section-head"><h2>诊断提示</h2></div>
     ${findings.length ? `<div class="finding-list">${findings.map(renderFinding).join("")}</div>` : emptyState("暂无风险提示", "当前没有发现明显异常。等节点和规则跑一段时间后，这里会显示更完整的判断。")}
     <div class="section-head"><h2>节点概览</h2></div>
@@ -327,8 +421,58 @@ function renderDashboard() {
   `;
 }
 
+function renderTrafficPanel(traffic) {
+  const max = Math.max(1, ...traffic.topRules.map(item => item.bytes));
+  const tcpPct = traffic.bytes ? Math.round(traffic.byProtocol.tcp / traffic.bytes * 100) : 0;
+  const udpPct = traffic.bytes ? Math.round(traffic.byProtocol.udp / traffic.bytes * 100) : 0;
+  return `
+    <div class="traffic-panel panel pad">
+      <div class="traffic-head">
+        <div>
+          <span class="eyebrow">流量统计</span>
+          <h2>中转累计流量</h2>
+          <p>基于 Agent 上报的 nftables counter 统计，适合判断哪些规则正在吃流量。</p>
+        </div>
+        <div class="traffic-total">
+          <strong>${fmtBytes(traffic.bytes)}</strong>
+          <span>${esc(traffic.packets)} 次连接/包</span>
+        </div>
+      </div>
+      <div class="traffic-split">
+        <div>
+          <span>TCP ${tcpPct}%</span>
+          <b><i style="width:${tcpPct}%"></i></b>
+        </div>
+        <div>
+          <span>UDP ${udpPct}%</span>
+          <b><i class="udp" style="width:${udpPct}%"></i></b>
+        </div>
+      </div>
+      <div class="traffic-bars">
+        ${traffic.topRules.length ? traffic.topRules.map((item, idx) => `
+          <div class="traffic-row">
+            <div>
+              <strong>${esc(item.rule?.name || item.rule_id)}</strong>
+              <span>${esc(item.rule ? `${protocolText(item.rule.protocol)} :${item.rule.listen_port}` : item.rule_id)}</span>
+            </div>
+            <div class="traffic-bar"><i class="bar-${idx % 5}" style="width:${Math.max(4, Math.round(item.bytes / max * 100))}%"></i></div>
+            <b>${fmtBytes(item.bytes)}</b>
+          </div>
+        `).join("") : `<div class="empty-inline">暂无 counter 数据。创建规则并产生访问后，这里会显示流量排行。</div>`}
+      </div>
+    </div>
+  `;
+}
+
 function renderNodes() {
-  return nodeTable(state.nodes);
+  return `
+    ${helperCard("严格防火墙在哪里设置", "当前严格防火墙由节点服务器上的 Agent 启动参数控制，不是在面板里直接切换。", [
+      { title: "启用位置", detail: "在节点的 agent.env 或启动命令里设置 RELAYCORE_FIREWALL_MODE=strict。" },
+      { title: "安全机制", detail: "严格模式有回滚保护，面板确认不到节点时 Agent 会回滚防火墙。" },
+      { title: "救援命令", detail: "如果误配置，可在节点执行 relaycore-agent rescue 清理 RelayCore 规则。" }
+    ])}
+    ${nodeTable(state.nodes)}
+  `;
 }
 
 function nodeTable(nodes) {
@@ -345,7 +489,10 @@ function nodeTable(nodes) {
             <td>${esc(n.last_metrics?.conntrack_count || 0)} / ${esc(n.last_metrics?.conntrack_max || 0)}<br>${pct(n.last_metrics?.conntrack_count, n.last_metrics?.conntrack_max)}</td>
             <td>${badge(n.forwarding_mode || "nftables", "info")} ${firewallBadge(n.firewall_mode)} ${badge(`${n.last_metrics?.forwarding_rule_count || 0} 条规则`, "ok")}</td>
             <td class="mono">${esc(n.public_ip || "-")}</td>
-            <td><button class="btn" data-open-node="${esc(n.id)}">详情</button></td>
+            <td><div class="row-actions">
+              <button class="btn" data-open-node="${esc(n.id)}">详情</button>
+              ${isAdminRole(state.user?.role) ? `<button class="btn" data-edit-node="${esc(n.id)}">重命名</button><button class="btn danger" data-delete-node="${esc(n.id)}">删除</button>` : ""}
+            </div></td>
           </tr>
         `).join("")}</tbody>
       </table>
@@ -355,38 +502,57 @@ function nodeTable(nodes) {
 }
 
 function renderRules() {
+  const editingRule = state.editingRuleID ? state.rules.find(r => r.id === state.editingRuleID) : null;
   return `
     ${helperCard("新增转发规则怎么填", "监听端口是别人访问节点时用的公网端口；目标地址和目标端口是最终要访问的服务。", [
       { title: "选节点", detail: "选择哪台 VPS 来负责这个公网入口。" },
       { title: "填目标", detail: "目标可以是内网 IP、后端公网 IP 或域名，确保节点能访问到它。" },
       { title: "保存后测试", detail: "保存后进入详情看 counter 是否增加，目标探测是否正常。" }
     ])}
-    <div id="ruleFormHost" class="hidden">${ruleForm()}</div>
+    <div id="ruleFormHost" class="${editingRule ? "" : "hidden"}">${ruleForm(editingRule)}</div>
     ${state.rules.length ? `
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>规则</th><th>协议</th><th>监听</th><th>目标</th><th>节点</th><th>归属</th><th>计数</th><th>应用</th><th>状态</th><th>操作</th></tr></thead>
-          <tbody>${state.rules.map(r => {
-            const node = state.nodes.find(n => n.id === r.node_id);
-            const total = counterTotal(r.id);
-            const report = reportOf(r.id);
-            return `<tr>
-              <td><strong>${esc(r.name)}</strong><div>${esc(r.description || "")}</div></td>
-              <td>${badge(protocolText(r.protocol), "info")}</td>
-              <td class="mono">:${esc(r.listen_port)}</td>
-              <td class="mono">${esc(r.target_host)}:${esc(r.target_port)}</td>
-              <td>${esc(node?.name || r.node_id)}</td>
-              <td>${esc(userName(r.user_id))}</td>
-              <td>${fmtBytes(total.bytes)}<br><span class="muted">${esc(total.packets)} 次连接/包</span></td>
-              <td>${applyBadge(r.last_apply_state || report.state)}<br><span class="muted">${esc(r.last_error || report.message || "")}</span></td>
-              <td>${enabledBadge(r.enabled)}</td>
-              <td><div class="row-actions"><button class="btn" data-open-rule="${esc(r.id)}">详情</button><button class="btn danger" data-delete-rule="${esc(r.id)}">删除</button></div></td>
-            </tr>`;
-          }).join("")}</tbody>
-        </table>
+      <div class="rule-list">
+        ${state.rules.map(r => renderRuleCard(r)).join("")}
       </div>
     ` : emptyState("还没有转发规则", "点击右上角“新增规则”，先创建一条简单的 TCP 规则测试。", "确认能访问后，再按需加 UDP 或来源白名单。")}
     ${renderRuleDrawer()}
+  `;
+}
+
+function renderRuleCard(r) {
+  const node = state.nodes.find(n => n.id === r.node_id);
+  const total = counterTotal(r.id);
+  const report = reportOf(r.id);
+  const listen = `${node?.public_ip || node?.hostname || "节点公网 IP"}:${r.listen_port}`;
+  return `
+    <article class="rule-card panel">
+      <div class="rule-main">
+        <div class="rule-title">
+          <strong>${esc(r.name)}</strong>
+          <p>${esc(r.description || "无备注")}</p>
+        </div>
+        <div class="rule-badges">
+          ${badge(protocolText(r.protocol), "info")}
+          ${enabledBadge(r.enabled)}
+          ${applyBadge(r.last_apply_state || report.state)}
+        </div>
+      </div>
+      <div class="rule-path">
+        <div><span>监听地址</span><strong class="mono">${esc(listen)}</strong></div>
+        <i></i>
+        <div><span>目标地址</span><strong class="mono">${esc(r.target_host)}:${esc(r.target_port)}</strong></div>
+      </div>
+      <div class="rule-meta">
+        <div><span>节点</span><strong>${esc(node?.name || r.node_id)}</strong></div>
+        <div><span>归属</span><strong>${esc(userName(r.user_id))}</strong></div>
+        <div><span>累计流量</span><strong>${fmtBytes(total.bytes)}</strong><em>${esc(total.packets)} 次连接/包</em></div>
+        <div><span>应用消息</span><strong>${esc(r.last_error || report.message || "正常")}</strong></div>
+      </div>
+      <div class="rule-actions row-actions">
+        <button class="btn" data-open-rule="${esc(r.id)}">详情</button>
+        ${isAdminRole(state.user?.role) ? `<button class="btn" data-edit-rule="${esc(r.id)}">编辑</button><button class="btn" data-toggle-rule="${esc(r.id)}">${r.enabled ? "停用" : "启用"}</button><button class="btn danger" data-delete-rule="${esc(r.id)}">删除</button>` : ""}
+      </div>
+    </article>
   `;
 }
 
@@ -565,6 +731,15 @@ function renderNodeDrawer() {
           </div>
 
           <section class="drawer-section">
+            <h3>防火墙模式说明</h3>
+            <div class="notice-panel">
+              <strong>当前：${esc(firewallText(node.firewall_mode))}</strong>
+              <p>这个状态由节点服务器上的 Agent 配置上报。要切换严格防火墙，需要在节点的 <span class="mono">/etc/relaycore-agent/agent.env</span> 中设置 <span class="mono">RELAYCORE_FIREWALL_MODE=strict</span>，并确认 <span class="mono">RELAYCORE_SSH_PORTS</span> 包含你的 SSH 端口，然后重启 <span class="mono">relaycore-agent</span>。</p>
+              <p>如果配置错误导致规则异常，可在节点执行 <span class="mono">relaycore-agent rescue</span> 清理 RelayCore 管理的 nftables 表。</p>
+            </div>
+          </section>
+
+          <section class="drawer-section">
             <h3>资源</h3>
             <div class="metric-strip">
               <div><span>1 分钟负载</span><strong>${Number(metrics.load1 || 0).toFixed(2)}</strong></div>
@@ -614,32 +789,37 @@ function renderNodeDrawer() {
   `;
 }
 
-function ruleForm() {
+function ruleForm(rule = null) {
+  const title = rule ? "编辑转发规则" : "把一个公网端口转到目标服务";
+  const intro = rule ? "修改后会触发规则版本更新，Agent 下一次心跳会重新应用。"
+    : "建议先用 TCP 创建一条最简单的规则测试。确认可用后，再加 UDP 或来源白名单。";
   return `
     <form class="panel pad grid form-panel" id="ruleForm">
       <div class="form-intro">
-        <span class="eyebrow">创建规则</span>
-        <h2>把一个公网端口转到目标服务</h2>
-        <p>建议先用 TCP 创建一条最简单的规则测试。确认可用后，再加 UDP 或来源白名单。</p>
+        <span class="eyebrow">${rule ? "编辑规则" : "创建规则"}</span>
+        <h2>${esc(title)}</h2>
+        <p>${esc(intro)}</p>
       </div>
       <div class="form-grid">
-        <label class="field">规则名称<input class="input" name="name" placeholder="例如：我的网站 8443" required />${fieldHelp("只用于面板里识别，建议写清楚用途。")}</label>
+        <input type="hidden" name="id" value="${esc(rule?.id || "")}" />
+        <label class="field">规则名称<input class="input" name="name" placeholder="例如：我的网站 8443" value="${esc(rule?.name || "")}" required />${fieldHelp("只用于面板里识别，建议写清楚用途。")}</label>
         <label class="field">节点<select class="select" name="node_id" required>
           <option value="">选择节点</option>
-          ${state.nodes.map(n => `<option value="${esc(n.id)}">${esc(n.name)}</option>`).join("")}
+          ${state.nodes.map(n => `<option value="${esc(n.id)}" ${rule?.node_id === n.id ? "selected" : ""}>${esc(n.name)}</option>`).join("")}
         </select>${fieldHelp("这台节点会开放公网监听端口。")}</label>
         ${isAdminRole(state.user?.role) ? `<label class="field">归属用户<select class="select" name="user_id">
           <option value="">当前用户</option>
-          ${state.users.map(u => `<option value="${esc(u.id)}">${esc(u.username)} / ${esc(roleText(u.role))}</option>`).join("")}
+          ${state.users.map(u => `<option value="${esc(u.id)}" ${rule?.user_id === u.id ? "selected" : ""}>${esc(u.username)} / ${esc(roleText(u.role))}</option>`).join("")}
         </select>${fieldHelp("普通用户只能看到归属于自己的规则。")}</label>` : ""}
-        <label class="field">协议<select class="select" name="protocol"><option value="tcp">TCP</option><option value="udp">UDP</option><option value="both">TCP + UDP</option></select>${fieldHelp("网站、SSH、面板通常选 TCP；游戏或语音服务可能需要 UDP。")}</label>
-        <label class="field">监听端口<input class="input" name="listen_port" type="number" min="1" max="65535" placeholder="例如 8443" required />${fieldHelp("用户访问节点公网 IP 时使用的端口。")}</label>
-        <label class="field">目标地址<input class="input" name="target_host" placeholder="例如 10.0.0.5 或 example.com" required />${fieldHelp("节点最终要转发到的服务器地址。")}</label>
-        <label class="field">目标端口<input class="input" name="target_port" type="number" min="1" max="65535" placeholder="例如 443" required />${fieldHelp("目标服务实际监听的端口。")}</label>
-        <label class="field wide">来源白名单<textarea class="textarea" name="source_cidrs" placeholder="一行一个，例如 1.2.3.4/32；留空表示允许所有来源"></textarea>${fieldHelp("不确定就先留空。需要限制访问来源时再填写 CIDR。")}</label>
-        <label class="field wide">备注<textarea class="textarea" name="description" placeholder="可选：写一下这个转发给谁用、转到哪里"></textarea></label>
+        <label class="field">协议<select class="select" name="protocol"><option value="tcp" ${rule?.protocol === "tcp" ? "selected" : ""}>TCP</option><option value="udp" ${rule?.protocol === "udp" ? "selected" : ""}>UDP</option><option value="both" ${rule?.protocol === "both" ? "selected" : ""}>TCP + UDP</option></select>${fieldHelp("网站、SSH、面板通常选 TCP；游戏或语音服务可能需要 UDP。")}</label>
+        <label class="field">监听端口<input class="input" name="listen_port" type="number" min="1" max="65535" placeholder="例如 8443" value="${esc(rule?.listen_port || "")}" required />${fieldHelp("用户访问节点公网 IP 时使用的端口。")}</label>
+        <label class="field">目标地址<input class="input" name="target_host" placeholder="例如 10.0.0.5 或 example.com" value="${esc(rule?.target_host || "")}" required />${fieldHelp("节点最终要转发到的服务器地址。")}</label>
+        <label class="field">目标端口<input class="input" name="target_port" type="number" min="1" max="65535" placeholder="例如 443" value="${esc(rule?.target_port || "")}" required />${fieldHelp("目标服务实际监听的端口。")}</label>
+        <label class="field">状态<select class="select" name="enabled"><option value="true" ${rule?.enabled !== false ? "selected" : ""}>启用</option><option value="false" ${rule?.enabled === false ? "selected" : ""}>停用</option></select>${fieldHelp("停用后规则不会下发到 Agent。")}</label>
+        <label class="field wide">来源白名单<textarea class="textarea" name="source_cidrs" placeholder="一行一个，例如 1.2.3.4/32；留空表示允许所有来源">${esc((rule?.source_cidrs || []).join("\n"))}</textarea>${fieldHelp("不确定就先留空。需要限制访问来源时再填写 CIDR。")}</label>
+        <label class="field wide">备注<textarea class="textarea" name="description" placeholder="可选：写一下这个转发给谁用、转到哪里">${esc(rule?.description || "")}</textarea></label>
       </div>
-      <div class="toolbar"><button class="btn primary" type="submit">保存规则</button><button class="btn" type="button" id="hideRuleForm">取消</button></div>
+      <div class="toolbar"><button class="btn primary" type="submit">${rule ? "保存修改" : "保存规则"}</button><button class="btn" type="button" id="hideRuleForm">取消</button></div>
     </form>
   `;
 }
@@ -773,11 +953,26 @@ function renderSecurity() {
 
 function renderEvents() {
   if (!state.events.length) return emptyState("暂无审计日志", "登录、创建规则、重置密码等关键操作会记录在这里。");
+  const cats = ["all", "认证", "用户", "节点", "规则", "系统", "其他"];
+  const filtered = state.eventCategory === "all" ? state.events : state.events.filter(e => eventCategory(e.action) === state.eventCategory);
   return `
+    <div class="panel pad event-filter">
+      <div>
+        <span class="eyebrow">日志分类</span>
+        <h2>审计日志</h2>
+        <p>这里记录登录、用户、节点、规则等关键操作。可以按分类查看。</p>
+      </div>
+      <div class="segment">
+        ${cats.map(cat => `<button class="${state.eventCategory === cat ? "active" : ""}" data-event-category="${esc(cat)}">${cat === "all" ? "全部" : esc(cat)}</button>`).join("")}
+      </div>
+    </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>时间</th><th>动作</th><th>目标</th><th>来源</th><th>详情</th></tr></thead>
-        <tbody>${state.events.map(e => `<tr><td>${esc(e.created_at)}</td><td>${esc(e.action)}</td><td>${esc(e.target)}</td><td>${esc(e.ip || "-")}</td><td>${esc(e.detail)}</td></tr>`).join("")}</tbody>
+        <thead><tr><th>时间</th><th>分类</th><th>操作人</th><th>动作</th><th>目标</th><th>来源</th><th>详情</th></tr></thead>
+        <tbody>${filtered.length ? filtered.map(e => {
+          const cat = eventCategory(e.action);
+          return `<tr><td>${esc(formatTime(e.created_at))}</td><td>${badge(cat, cat === "认证" ? "info" : cat === "规则" ? "warn" : cat === "节点" ? "ok" : "neutral")}</td><td>${esc(e.actor_id ? userName(e.actor_id) : "系统")}</td><td>${esc(eventActionText(e.action))}</td><td>${esc(eventTargetText(e.target))}</td><td class="mono">${esc(e.ip || "-")}</td><td>${esc(eventDetailText(e.detail))}</td></tr>`;
+        }).join("") : `<tr><td colspan="7">${emptyState("暂无匹配日志", "换一个分类或刷新后再看。")}</td></tr>`}</tbody>
       </table>
     </div>
   `;
@@ -809,10 +1004,10 @@ function applyBadge(state) {
 }
 
 function firewallBadge(mode) {
-  if (mode === "strict") return badge("严格防火墙", "warn");
-  if (mode === "strict_pending") return badge("等待严格确认", "warn");
-  if (mode === "managed") return badge("托管防火墙", "info");
-  return badge(mode || "托管防火墙", "info");
+  if (mode === "strict") return badge(firewallText(mode), "warn");
+  if (mode === "strict_pending") return badge(firewallText(mode), "warn");
+  if (mode === "managed") return badge(firewallText(mode), "info");
+  return badge(firewallText(mode), "info");
 }
 
 function renderProbes(probes) {
@@ -838,9 +1033,16 @@ function renderTOTPQR(uri) {
 
 function bindPageEvents() {
   const showRule = document.getElementById("showRuleForm");
-  if (showRule) showRule.addEventListener("click", () => document.getElementById("ruleFormHost").classList.remove("hidden"));
+  if (showRule) showRule.addEventListener("click", () => {
+    state.editingRuleID = null;
+    renderApp();
+    document.getElementById("ruleFormHost")?.classList.remove("hidden");
+  });
   const hideRule = document.getElementById("hideRuleForm");
-  if (hideRule) hideRule.addEventListener("click", () => document.getElementById("ruleFormHost").classList.add("hidden"));
+  if (hideRule) hideRule.addEventListener("click", () => {
+    state.editingRuleID = null;
+    renderApp();
+  });
   const ruleFormEl = document.getElementById("ruleForm");
   if (ruleFormEl) ruleFormEl.addEventListener("submit", submitRule);
   document.querySelectorAll("[data-open-node]").forEach(btn => btn.addEventListener("click", async () => {
@@ -854,6 +1056,30 @@ function bindPageEvents() {
     state.selectedNodeID = null;
     renderApp();
   }));
+  document.querySelectorAll("[data-edit-node]").forEach(btn => btn.addEventListener("click", async () => {
+    const node = state.nodes.find(n => n.id === btn.dataset.editNode);
+    if (!node) return;
+    const name = prompt("请输入新的节点名称", node.name);
+    if (name == null) return;
+    try {
+      await api(`/api/nodes/${encodeURIComponent(node.id)}`, { method: "PUT", body: JSON.stringify({ name }) });
+      await refreshAll();
+      renderApp();
+      toast("节点已更新");
+    } catch (err) { toast(err.message, "danger"); }
+  }));
+  document.querySelectorAll("[data-delete-node]").forEach(btn => btn.addEventListener("click", async () => {
+    const node = state.nodes.find(n => n.id === btn.dataset.deleteNode);
+    if (!node) return;
+    const related = state.rules.filter(r => r.node_id === node.id).length;
+    if (!confirm(`确认删除节点“${node.name}”？${related ? `该节点下 ${related} 条规则也会被删除。` : ""}`)) return;
+    try {
+      await api(`/api/nodes/${encodeURIComponent(node.id)}`, { method: "DELETE" });
+      await refreshAll();
+      renderApp();
+      toast("节点已删除");
+    } catch (err) { toast(err.message, "danger"); }
+  }));
   document.querySelectorAll("[data-open-rule]").forEach(btn => btn.addEventListener("click", async () => {
     state.selectedRuleID = btn.dataset.openRule;
     try {
@@ -864,6 +1090,20 @@ function bindPageEvents() {
   document.querySelectorAll("[data-close-rule]").forEach(btn => btn.addEventListener("click", () => {
     state.selectedRuleID = null;
     renderApp();
+  }));
+  document.querySelectorAll("[data-edit-rule]").forEach(btn => btn.addEventListener("click", () => {
+    state.editingRuleID = btn.dataset.editRule;
+    renderApp();
+  }));
+  document.querySelectorAll("[data-toggle-rule]").forEach(btn => btn.addEventListener("click", async () => {
+    const rule = state.rules.find(r => r.id === btn.dataset.toggleRule);
+    if (!rule) return;
+    try {
+      await saveRulePayload({ ...rule, enabled: !rule.enabled });
+      await refreshAll();
+      renderApp();
+      toast(rule.enabled ? "规则已停用" : "规则已启用");
+    } catch (err) { toast(err.message, "danger"); }
   }));
   document.querySelectorAll("[data-delete-rule]").forEach(btn => btn.addEventListener("click", async () => {
     if (!confirm("确认删除该规则？")) return;
@@ -895,12 +1135,17 @@ function bindPageEvents() {
   if (totpEnable) totpEnable.addEventListener("submit", submitTOTPEnable);
   const totpDisable = document.getElementById("totpDisableForm");
   if (totpDisable) totpDisable.addEventListener("submit", submitTOTPDisable);
+  document.querySelectorAll("[data-event-category]").forEach(btn => btn.addEventListener("click", () => {
+    state.eventCategory = btn.dataset.eventCategory;
+    renderApp();
+  }));
 }
 
 async function submitRule(e) {
   e.preventDefault();
   const fd = Object.fromEntries(new FormData(e.currentTarget));
   const body = {
+    id: fd.id || "",
     name: fd.name,
     node_id: fd.node_id,
     protocol: fd.protocol,
@@ -910,14 +1155,21 @@ async function submitRule(e) {
     user_id: fd.user_id || "",
     source_cidrs: String(fd.source_cidrs || "").split(/\n|,/).map(s => s.trim()).filter(Boolean),
     description: fd.description || "",
-    enabled: true
+    enabled: fd.enabled !== "false"
   };
   try {
-    await api("/api/rules", { method: "POST", body: JSON.stringify(body) });
+    await saveRulePayload(body);
+    state.editingRuleID = null;
     await refreshAll();
     renderApp();
     toast("规则已保存");
   } catch (err) { toast(err.message, "danger"); }
+}
+
+async function saveRulePayload(rule) {
+  const path = rule.id ? `/api/rules/${encodeURIComponent(rule.id)}` : "/api/rules";
+  const method = rule.id ? "PUT" : "POST";
+  await api(path, { method, body: JSON.stringify(rule) });
 }
 
 async function submitToken(e) {

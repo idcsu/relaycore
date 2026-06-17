@@ -35,6 +35,10 @@ Core principles:
 - SQLite-backed snapshot storage using system `libsqlite3` through CGO.
 - Legacy import path from `relaycore.json` to `relaycore.db`.
 - Node registration with one-time token.
+- Node management:
+  - node rename
+  - node delete
+  - deleting a node also removes its forwarding rules and related counter/report history
 - HMAC-signed Agent heartbeat with timestamp + nonce replay protection.
 - Rule CRUD.
 - Node list.
@@ -148,7 +152,12 @@ Panel diagnostics currently includes:
 - Beginner-friendly helper cards for first-use flow, rule creation, diagnostics, node onboarding, users, and TOTP.
 - Chinese status labels for node state, rule enabled/apply state, firewall mode, probes, and user roles.
 - Field-level help text for rule creation and node onboarding.
-- Refined local CSS visual design with responsive layout, local font stack, status colors, drawer/toast/page animations, and no external assets.
+- Blue/indigo local CSS visual design with responsive layout, local font stack, status colors, gradients, drawer/toast/page animations, and no external assets.
+- Dashboard traffic panel:
+  - total RelayCore counter bytes
+  - total packets/connections
+  - TCP/UDP split
+  - top rules by traffic
 - Pages:
   - login
   - dashboard
@@ -159,6 +168,7 @@ Panel diagnostics currently includes:
   - security / TOTP
   - audit events
 - Rules page shows:
+  - responsive rule cards
   - protocol
   - listen port
   - target
@@ -166,6 +176,9 @@ Panel diagnostics currently includes:
   - owner user
   - counter total
   - apply state/message
+  - edit
+  - enable/disable
+  - delete
   - rule detail drawer with apply report, probes, counters, recommended actions, and ruleset fragment
 - Users page shows:
   - users
@@ -181,6 +194,8 @@ Panel diagnostics currently includes:
   - resource usage
   - conntrack pressure
   - forwarding/firewall mode
+  - node rename/delete actions for admins
+  - strict firewall explanation and Agent-side configuration notes
   - node detail drawer with metrics, TCP retransmission ratio, last errors, private IPs, assigned rules, and ruleset preview
 - Diagnostics page shows:
   - global findings
@@ -191,6 +206,9 @@ Panel diagnostics currently includes:
   - counter rates
   - node trend deltas
   - likely cause summaries
+- Audit events page shows:
+  - Simplified Chinese action/detail labels
+  - category filters for auth, users, nodes, rules, system, and other events
 
 ### Deployment
 
@@ -201,11 +219,13 @@ Panel diagnostics currently includes:
   - creates `/etc/relaycore/panel.env`
   - stores data under `/var/lib/relaycore`
   - runs Panel as non-root
+  - restarts the service after install/upgrade so the new binary is active
 - Agent install script:
   - installs binary
   - creates `/etc/relaycore-agent/agent.env`
   - supports Panel URL/token/dry-run/strict firewall settings through env
   - constrains systemd capabilities to network administration needs
+  - restarts the service after install/upgrade so the new binary is active
 - Release build script:
   - `scripts/build-release.sh`
   - `make release VERSION=...`
@@ -256,6 +276,7 @@ Additional checks:
 - Agent rescue command unit-tested with fake `nft`.
 - Diagnostics trend/rate helpers unit-tested.
 - User management store helpers unit-tested.
+- Node management store helpers unit-tested.
 - User management API smoke-checked:
   - list users
   - create user

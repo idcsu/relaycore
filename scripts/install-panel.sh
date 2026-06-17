@@ -74,7 +74,8 @@ WantedBy=multi-user.target
 SERVICE_EOF
 
 systemctl daemon-reload
-systemctl enable --now relaycore-panel
+systemctl enable relaycore-panel
+systemctl restart relaycore-panel
 echo "RelayCore Panel 已启动：http://127.0.0.1:10028"
 echo "配置文件：${ENV_FILE}"
 echo "生产环境建议通过 Nginx/Caddy 反向代理并启用 HTTPS。"

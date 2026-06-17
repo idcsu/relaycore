@@ -78,6 +78,7 @@ func (s *Server) ListenAndServe() error {
 	mux.HandleFunc("/api/dashboard", s.requireAuth(s.handleDashboard))
 	mux.HandleFunc("/api/diagnostics", s.requireAuth(s.handleDiagnostics))
 	mux.HandleFunc("/api/nodes", s.requireAuth(s.handleNodes))
+	mux.HandleFunc("/api/nodes/", s.requireAuth(s.handleNodeByID))
 	mux.HandleFunc("/api/node-tokens", s.requireAuth(s.handleNodeTokens))
 	mux.HandleFunc("/api/rules", s.requireAuth(s.handleRules))
 	mux.HandleFunc("/api/rules/", s.requireAuth(s.handleRuleByID))
@@ -284,6 +285,41 @@ func (s *Server) handleNodes(w http.ResponseWriter, r *http.Request, _ common.Us
 		return
 	}
 	writeJSON(w, map[string]any{"items": s.store.ListNodes()})
+}
+
+func (s *Server) handleNodeByID(w http.ResponseWriter, r *http.Request, u common.User) {
+	if !isAdmin(u) {
+		writeError(w, http.StatusForbidden, "permission denied")
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/api/nodes/")
+	if id == "" {
+		writeError(w, http.StatusNotFound, "node not found")
+		return
+	}
+	switch r.Method {
+	case http.MethodPut:
+		var req struct {
+			Name string `json:"name"`
+		}
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		updated, err := s.store.UpdateNode(id, req.Name, u, realIP(r))
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, map[string]any{"item": updated})
+	case http.MethodDelete:
+		if err := s.store.DeleteNode(id, u, realIP(r)); err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
 }
 
 func (s *Server) handleNodeTokens(w http.ResponseWriter, r *http.Request, u common.User) {

@@ -568,6 +568,55 @@ func (s *Store) NodeSecret(id string) (string, bool) {
 	return n.Secret, true
 }
 
+func (s *Store) UpdateNode(id, name string, actor common.User, ip string) (common.Node, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return common.Node{}, fmt.Errorf("%w: node name is required", ErrBadRequest)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n, ok := s.data.Nodes[id]
+	if !ok {
+		return common.Node{}, ErrNotFound
+	}
+	n.Name = name
+	n.UpdatedAt = time.Now()
+	s.data.Nodes[id] = n
+	s.addEventLocked(actor.ID, "node.update", "node:"+id, ip, "updated node "+name)
+	if err := s.saveLocked(); err != nil {
+		return common.Node{}, err
+	}
+	n.Secret = ""
+	return n, nil
+}
+
+func (s *Store) DeleteNode(id string, actor common.User, ip string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.data.Nodes[id]; !ok {
+		return ErrNotFound
+	}
+	delete(s.data.Nodes, id)
+	for tokenID, token := range s.data.NodeTokens {
+		if token.UsedByNode == id {
+			token.UsedByNode = ""
+			s.data.NodeTokens[tokenID] = token
+		}
+	}
+	removedRules := 0
+	for ruleID, rule := range s.data.Rules {
+		if rule.NodeID != id {
+			continue
+		}
+		s.deleteRuleLocked(ruleID)
+		removedRules++
+	}
+	delete(s.data.MetricHistory, id)
+	s.data.RuleVersion++
+	s.addEventLocked(actor.ID, "node.delete", "node:"+id, ip, fmt.Sprintf("deleted node and %d rule(s)", removedRules))
+	return s.saveLocked()
+}
+
 func (s *Store) CreateNodeToken(name string, hours int) (common.NodeToken, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -749,6 +798,13 @@ func (s *Store) DeleteRule(id string, actor common.User, ip string) error {
 	if _, ok := s.data.Rules[id]; !ok {
 		return ErrNotFound
 	}
+	s.deleteRuleLocked(id)
+	s.data.RuleVersion++
+	s.addEventLocked(actor.ID, "rule.delete", "rule:"+id, ip, "deleted forwarding rule")
+	return s.saveLocked()
+}
+
+func (s *Store) deleteRuleLocked(id string) {
 	delete(s.data.Rules, id)
 	delete(s.data.RuleReports, id)
 	for k, c := range s.data.Counters {
@@ -770,9 +826,6 @@ func (s *Store) DeleteRule(id string, actor common.User, ip string) error {
 		s.data.CounterHistory[k] = kept
 	}
 	delete(s.data.TargetHistory, id)
-	s.data.RuleVersion++
-	s.addEventLocked(actor.ID, "rule.delete", "rule:"+id, ip, "deleted forwarding rule")
-	return s.saveLocked()
 }
 
 func (s *Store) UpdateHeartbeat(req common.AgentHeartbeatRequest, remoteIP string) (int64, error) {

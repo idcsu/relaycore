@@ -65,6 +65,7 @@ WantedBy=multi-user.target
 SERVICE_EOF
 
 systemctl daemon-reload
-systemctl enable --now relaycore-agent
+systemctl enable relaycore-agent
+systemctl restart relaycore-agent
 echo "RelayCore Agent 已启动。首次接入请使用面板生成的 relaycore-agent -panel ... -token ... 命令运行一次。"
 echo "也可以编辑 ${ENV_FILE} 填入 RELAYCORE_PANEL 和 RELAYCORE_TOKEN 后重启服务。"
