@@ -1,0 +1,8 @@
+data/
+agent-data/
+/relaycore-panel
+/relaycore-agent
+dist/
+*.log
+*.tmp
+.DS_Store
