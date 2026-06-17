@@ -4,8 +4,11 @@ import "time"
 
 const (
 	ProjectName = "RelayCore"
-	Version     = "0.1.1"
 )
+
+// Version is set at build time via -ldflags "-X relaycore/internal/common.Version=0.1.1".
+// Falls back to "dev" if not injected.
+var Version = "dev"
 
 type Role string
 

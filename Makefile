@@ -1,14 +1,15 @@
 VERSION ?= dev
+LDFLAGS := -X relaycore/internal/common.Version=$(VERSION)
 
 .PHONY: all panel agent web web-install fmt test release clean
 
 all: panel agent
 
 panel:
-	CGO_ENABLED=1 go build -trimpath -o relaycore-panel ./cmd/relaycore-panel
+	CGO_ENABLED=1 go build -trimpath -ldflags "$(LDFLAGS)" -o relaycore-panel ./cmd/relaycore-panel
 
 agent:
-	go build -trimpath -o relaycore-agent ./cmd/relaycore-agent
+	go build -trimpath -ldflags "$(LDFLAGS)" -o relaycore-agent ./cmd/relaycore-agent
 
 # Build the React/Vite frontend into web/ (the panel serves it as static files).
 # Requires Node.js + npm. The built assets in web/ are committed so deploys do

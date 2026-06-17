@@ -12,8 +12,9 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE"
 
 echo "Building RelayCore ${VERSION} for ${GOOS_VALUE}/${GOARCH_VALUE}"
-CGO_ENABLED="${CGO_ENABLED:-1}" GOOS="$GOOS_VALUE" GOARCH="$GOARCH_VALUE" go build -trimpath -ldflags "-s -w" -o "${STAGE}/relaycore-panel" ./cmd/relaycore-panel
-GOOS="$GOOS_VALUE" GOARCH="$GOARCH_VALUE" go build -trimpath -ldflags "-s -w" -o "${STAGE}/relaycore-agent" ./cmd/relaycore-agent
+LDFLAGS="-X relaycore/internal/common.Version=${VERSION}"
+CGO_ENABLED="${CGO_ENABLED:-1}" GOOS="$GOOS_VALUE" GOARCH="$GOARCH_VALUE" go build -trimpath -ldflags "-s -w ${LDFLAGS}" -o "${STAGE}/relaycore-panel" ./cmd/relaycore-panel
+GOOS="$GOOS_VALUE" GOARCH="$GOARCH_VALUE" go build -trimpath -ldflags "-s -w ${LDFLAGS}" -o "${STAGE}/relaycore-agent" ./cmd/relaycore-agent
 
 cp -a web deploy scripts docs "$STAGE/"
 cp -a Makefile go.mod "$STAGE/"
