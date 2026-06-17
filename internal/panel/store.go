@@ -19,10 +19,11 @@ import (
 const defaultSessionTTL = 24 * time.Hour
 
 const (
-	maxNodeMetricSamples  = 240
-	maxRuleCounterSamples = 240
-	maxTargetIPSamples    = 50
-	trendWindow           = 5 * time.Minute
+	maxNodeMetricSamples           = 240
+	maxRuleCounterSamples          = 240
+	maxTargetIPSamples             = 50
+	trendWindow                    = 5 * time.Minute
+	defaultFirewallRollbackSeconds = 60
 )
 
 var (
@@ -148,6 +149,14 @@ type RuleCounterRate struct {
 	BytesPerSecond   float64 `json:"bytes_per_second"`
 }
 
+type NodeUpdate struct {
+	Name                    *string
+	DesiredFirewallMode     *string
+	FirewallSSHPorts        []int
+	FirewallSSHPortsSet     bool
+	FirewallRollbackSeconds *int
+}
+
 func OpenStore(path, adminUser, adminPassword string) (*Store, string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, "", err
@@ -271,6 +280,12 @@ func (s *Store) ensureDataLocked() {
 	}
 	if s.data.InitializedAt.IsZero() {
 		s.data.InitializedAt = time.Now()
+	}
+	for id, node := range s.data.Nodes {
+		changed := ensureNodeFirewallDefaults(&node)
+		if changed {
+			s.data.Nodes[id] = node
+		}
 	}
 }
 
@@ -558,6 +573,17 @@ func (s *Store) GetNode(id string) (common.Node, bool) {
 	return n, ok
 }
 
+func (s *Store) NodeFirewallPolicy(id string) (common.FirewallPolicy, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n, ok := s.data.Nodes[id]
+	if !ok {
+		return common.FirewallPolicy{}, false
+	}
+	ensureNodeFirewallDefaults(&n)
+	return nodeFirewallPolicy(n), true
+}
+
 func (s *Store) NodeSecret(id string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -569,9 +595,27 @@ func (s *Store) NodeSecret(id string) (string, bool) {
 }
 
 func (s *Store) UpdateNode(id, name string, actor common.User, ip string) (common.Node, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return common.Node{}, fmt.Errorf("%w: node name is required", ErrBadRequest)
+	return s.UpdateNodeSettings(id, NodeUpdate{Name: &name}, actor, ip)
+}
+
+func (s *Store) UpdateNodeSettings(id string, update NodeUpdate, actor common.User, ip string) (common.Node, error) {
+	if update.Name != nil {
+		name := strings.TrimSpace(*update.Name)
+		if name == "" {
+			return common.Node{}, fmt.Errorf("%w: node name is required", ErrBadRequest)
+		}
+		update.Name = &name
+	}
+	if update.DesiredFirewallMode != nil {
+		mode := normalizeDesiredFirewallMode(*update.DesiredFirewallMode)
+		update.DesiredFirewallMode = &mode
+	}
+	if update.FirewallSSHPortsSet {
+		update.FirewallSSHPorts = normalizePanelPorts(update.FirewallSSHPorts)
+	}
+	if update.FirewallRollbackSeconds != nil {
+		seconds := clampFirewallRollbackSeconds(*update.FirewallRollbackSeconds)
+		update.FirewallRollbackSeconds = &seconds
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -579,10 +623,36 @@ func (s *Store) UpdateNode(id, name string, actor common.User, ip string) (commo
 	if !ok {
 		return common.Node{}, ErrNotFound
 	}
-	n.Name = name
+	ensureNodeFirewallDefaults(&n)
+	oldPolicy := nodeFirewallPolicy(n)
+	if update.Name != nil {
+		n.Name = *update.Name
+	}
+	if update.DesiredFirewallMode != nil {
+		n.DesiredFirewallMode = *update.DesiredFirewallMode
+	}
+	if update.FirewallSSHPortsSet {
+		n.FirewallSSHPorts = append([]int(nil), update.FirewallSSHPorts...)
+	}
+	if update.FirewallRollbackSeconds != nil {
+		n.FirewallRollbackSeconds = *update.FirewallRollbackSeconds
+	}
+	ensureNodeFirewallDefaults(&n)
+	newPolicy := nodeFirewallPolicy(n)
+	if !firewallPolicyEqual(oldPolicy, newPolicy) {
+		s.data.RuleVersion++
+		for ruleID, rule := range s.data.Rules {
+			if rule.NodeID == id {
+				rule.LastApplyState = "pending"
+				rule.LastError = ""
+				rule.UpdatedAt = time.Now()
+				s.data.Rules[ruleID] = rule
+			}
+		}
+	}
 	n.UpdatedAt = time.Now()
 	s.data.Nodes[id] = n
-	s.addEventLocked(actor.ID, "node.update", "node:"+id, ip, "updated node "+name)
+	s.addEventLocked(actor.ID, "node.update", "node:"+id, ip, "updated node "+n.Name+" firewall="+n.DesiredFirewallMode)
 	if err := s.saveLocked(); err != nil {
 		return common.Node{}, err
 	}
@@ -615,6 +685,101 @@ func (s *Store) DeleteNode(id string, actor common.User, ip string) error {
 	s.data.RuleVersion++
 	s.addEventLocked(actor.ID, "node.delete", "node:"+id, ip, fmt.Sprintf("deleted node and %d rule(s)", removedRules))
 	return s.saveLocked()
+}
+
+func ensureNodeFirewallDefaults(n *common.Node) bool {
+	changed := false
+	if n.DesiredFirewallMode == "" {
+		if n.FirewallMode == "strict" || n.FirewallMode == "strict_pending" {
+			n.DesiredFirewallMode = "strict"
+		} else {
+			n.DesiredFirewallMode = "managed"
+		}
+		changed = true
+	} else {
+		mode := normalizeDesiredFirewallMode(n.DesiredFirewallMode)
+		if mode != n.DesiredFirewallMode {
+			n.DesiredFirewallMode = mode
+			changed = true
+		}
+	}
+	ports := normalizePanelPorts(n.FirewallSSHPorts)
+	if !intSlicesEqual(ports, n.FirewallSSHPorts) {
+		n.FirewallSSHPorts = ports
+		changed = true
+	}
+	rollback := clampFirewallRollbackSeconds(n.FirewallRollbackSeconds)
+	if rollback != n.FirewallRollbackSeconds {
+		n.FirewallRollbackSeconds = rollback
+		changed = true
+	}
+	return changed
+}
+
+func nodeFirewallPolicy(n common.Node) common.FirewallPolicy {
+	return common.FirewallPolicy{
+		Mode:            normalizeDesiredFirewallMode(n.DesiredFirewallMode),
+		SSHPorts:        normalizePanelPorts(n.FirewallSSHPorts),
+		RollbackSeconds: clampFirewallRollbackSeconds(n.FirewallRollbackSeconds),
+	}
+}
+
+func normalizeDesiredFirewallMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "strict", "strict_pending", "strict-pending":
+		return "strict"
+	default:
+		return "managed"
+	}
+}
+
+func normalizePanelPorts(in []int) []int {
+	seen := map[int]struct{}{}
+	out := []int{}
+	for _, port := range in {
+		if port < 1 || port > 65535 {
+			continue
+		}
+		if _, ok := seen[port]; ok {
+			continue
+		}
+		seen[port] = struct{}{}
+		out = append(out, port)
+	}
+	if len(out) == 0 {
+		out = append(out, 22)
+	}
+	sort.Ints(out)
+	return out
+}
+
+func clampFirewallRollbackSeconds(seconds int) int {
+	if seconds <= 0 {
+		return defaultFirewallRollbackSeconds
+	}
+	if seconds < 15 {
+		return 15
+	}
+	if seconds > 600 {
+		return 600
+	}
+	return seconds
+}
+
+func firewallPolicyEqual(a, b common.FirewallPolicy) bool {
+	return a.Mode == b.Mode && a.RollbackSeconds == b.RollbackSeconds && intSlicesEqual(a.SSHPorts, b.SSHPorts)
+}
+
+func intSlicesEqual(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Store) CreateNodeToken(name string, hours int) (common.NodeToken, error) {
@@ -697,22 +862,25 @@ func (s *Store) RegisterNode(req common.AgentRegisterRequest, remoteIP string) (
 		name = tok.Name
 	}
 	n := common.Node{
-		ID:             nodeID,
-		Name:           name,
-		Secret:         secret,
-		Status:         "online",
-		Hostname:       req.Hostname,
-		OS:             req.OS,
-		Arch:           req.Arch,
-		AgentVersion:   req.AgentVersion,
-		PublicIP:       remoteIP,
-		PrivateIPs:     req.PrivateIPs,
-		ForwardingMode: "nftables",
-		FirewallMode:   "managed",
-		RuleVersion:    s.data.RuleVersion,
-		LastSeenAt:     &now,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:                      nodeID,
+		Name:                    name,
+		Secret:                  secret,
+		Status:                  "online",
+		Hostname:                req.Hostname,
+		OS:                      req.OS,
+		Arch:                    req.Arch,
+		AgentVersion:            req.AgentVersion,
+		PublicIP:                remoteIP,
+		PrivateIPs:              req.PrivateIPs,
+		ForwardingMode:          "nftables",
+		FirewallMode:            normalizeDesiredFirewallMode(req.FirewallMode),
+		DesiredFirewallMode:     normalizeDesiredFirewallMode(req.FirewallMode),
+		FirewallSSHPorts:        normalizePanelPorts(req.SSHPorts),
+		FirewallRollbackSeconds: clampFirewallRollbackSeconds(req.RollbackSeconds),
+		RuleVersion:             s.data.RuleVersion,
+		LastSeenAt:              &now,
+		CreatedAt:               now,
+		UpdatedAt:               now,
 	}
 	s.data.Nodes[nodeID] = n
 	tok.UsedByNode = nodeID
@@ -828,13 +996,14 @@ func (s *Store) deleteRuleLocked(id string) {
 	delete(s.data.TargetHistory, id)
 }
 
-func (s *Store) UpdateHeartbeat(req common.AgentHeartbeatRequest, remoteIP string) (int64, error) {
+func (s *Store) UpdateHeartbeat(req common.AgentHeartbeatRequest, remoteIP string) (int64, common.FirewallPolicy, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	n, ok := s.data.Nodes[req.NodeID]
 	if !ok {
-		return 0, ErrNotFound
+		return 0, common.FirewallPolicy{}, ErrNotFound
 	}
+	ensureNodeFirewallDefaults(&n)
 	now := time.Now()
 	n.Status = "online"
 	n.Hostname = req.Hostname
@@ -874,7 +1043,8 @@ func (s *Store) UpdateHeartbeat(req common.AgentHeartbeatRequest, remoteIP strin
 			s.data.Rules[rule.ID] = rule
 		}
 	}
-	return s.data.RuleVersion, s.saveLocked()
+	policy := nodeFirewallPolicy(n)
+	return s.data.RuleVersion, policy, s.saveLocked()
 }
 
 func (s *Store) recordMetricHistoryLocked(nodeID string, metrics common.NodeMetrics, at time.Time) {

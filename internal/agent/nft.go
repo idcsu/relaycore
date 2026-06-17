@@ -63,6 +63,20 @@ func NewNFTManagerWithFirewall(dryRun bool, firewall FirewallOptions) *NFTManage
 	return &NFTManager{dryRun: dryRun, firewall: normalizeFirewallOptions(firewall)}
 }
 
+func (m *NFTManager) SetFirewallOptions(firewall FirewallOptions) bool {
+	next := normalizeFirewallOptions(firewall)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if firewallOptionsEqual(m.firewall, next) {
+		return false
+	}
+	m.firewall = next
+	if next.Mode != "strict" {
+		m.cancelFirewallRollbackLocked()
+	}
+	return true
+}
+
 func (m *NFTManager) FirewallMode() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -74,6 +88,20 @@ func (m *NFTManager) FirewallMode() string {
 		return "strict_pending"
 	}
 	return mode
+}
+
+func firewallOptionsEqual(a, b FirewallOptions) bool {
+	a = normalizeFirewallOptions(a)
+	b = normalizeFirewallOptions(b)
+	if a.Mode != b.Mode || a.RollbackDelay != b.RollbackDelay || len(a.SSHPorts) != len(b.SSHPorts) {
+		return false
+	}
+	for i := range a.SSHPorts {
+		if a.SSHPorts[i] != b.SSHPorts[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *NFTManager) ConfirmReachable() {

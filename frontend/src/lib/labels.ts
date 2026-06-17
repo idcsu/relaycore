@@ -27,7 +27,7 @@ export function severityText(severity?: string): string {
 
 export function firewallText(mode?: string): string {
   if (mode === "strict") return "严格防火墙";
-  if (mode === "strict_pending") return "严格确认中";
+  if (mode === "strict_pending" || mode === "strict-pending") return "严格确认中";
   if (mode === "managed") return "托管防火墙";
   return mode || "托管防火墙";
 }
@@ -52,7 +52,7 @@ export function applyStateTone(state?: ApplyState): Tone {
 }
 
 export function firewallTone(mode?: string): Tone {
-  if (mode === "strict" || mode === "strict_pending") return "warn";
+  if (mode === "strict" || mode === "strict_pending" || mode === "strict-pending") return "warn";
   return "info";
 }
 

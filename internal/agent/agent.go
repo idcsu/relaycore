@@ -94,13 +94,16 @@ func (a *Agent) Register() error {
 		name = host
 	}
 	req := common.AgentRegisterRequest{
-		Token:        a.cfg.Token,
-		Name:         name,
-		Hostname:     host,
-		OS:           runtime.GOOS,
-		Arch:         runtime.GOARCH,
-		AgentVersion: common.Version,
-		PrivateIPs:   privateIPs(),
+		Token:           a.cfg.Token,
+		Name:            name,
+		Hostname:        host,
+		OS:              runtime.GOOS,
+		Arch:            runtime.GOARCH,
+		AgentVersion:    common.Version,
+		PrivateIPs:      privateIPs(),
+		FirewallMode:    a.cfg.FirewallMode,
+		SSHPorts:        a.cfg.SSHPorts,
+		RollbackSeconds: a.cfg.RollbackSeconds,
 	}
 	var resp common.AgentRegisterResponse
 	if err := a.postJSON("/api/agent/register", req, &resp, false); err != nil {
@@ -118,6 +121,12 @@ func (a *Agent) heartbeatOnce() error {
 	var resp common.AgentHeartbeatResponse
 	if err := a.postJSON("/api/agent/heartbeat", req, &resp, true); err != nil {
 		return err
+	}
+	if a.applyPanelFirewallPolicy(resp.FirewallPolicy) {
+		a.cfg.RuleVersion = -1
+		if err := a.SaveConfig(); err != nil {
+			return err
+		}
 	}
 	if resp.RuleVersion != a.cfg.RuleVersion {
 		applyErr := a.nft.Apply(resp.Rules)
@@ -137,6 +146,7 @@ func (a *Agent) heartbeatOnce() error {
 				return err
 			}
 		} else if applyErr == nil {
+			_ = a.applyPanelFirewallPolicy(statusResp.FirewallPolicy)
 			a.nft.ConfirmReachable()
 		}
 		if applyErr != nil {
@@ -144,6 +154,38 @@ func (a *Agent) heartbeatOnce() error {
 		}
 	}
 	return nil
+}
+
+func (a *Agent) applyPanelFirewallPolicy(policy common.FirewallPolicy) bool {
+	if strings.TrimSpace(policy.Mode) == "" {
+		return false
+	}
+	options := normalizeFirewallOptions(FirewallOptions{
+		Mode:          policy.Mode,
+		SSHPorts:      policy.SSHPorts,
+		RollbackDelay: time.Duration(policy.RollbackSeconds) * time.Second,
+	})
+	changed := a.nft.SetFirewallOptions(options)
+	rollbackSeconds := int(options.RollbackDelay / time.Second)
+	if a.cfg.FirewallMode != options.Mode || !samePorts(a.cfg.SSHPorts, options.SSHPorts) || a.cfg.RollbackSeconds != rollbackSeconds {
+		a.cfg.FirewallMode = options.Mode
+		a.cfg.SSHPorts = append([]int(nil), options.SSHPorts...)
+		a.cfg.RollbackSeconds = rollbackSeconds
+		changed = true
+	}
+	return changed
+}
+
+func samePorts(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *Agent) heartbeatRequest() common.AgentHeartbeatRequest {

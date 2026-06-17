@@ -79,20 +79,20 @@ export function NodeDrawer({
         <div>
           <span>防火墙</span>
           <strong>
-            <FirewallBadge mode={node.firewall_mode} />
+            <FirewallBadge mode={node.firewall_mode} desired={node.desired_firewall_mode} />
           </strong>
         </div>
       </div>
 
       <DrawerSection title="防火墙模式说明">
         <div className="notice-panel">
-          <strong>当前：{firewallText(node.firewall_mode)}</strong>
+          <strong>
+            当前：{firewallText(node.firewall_mode)} / 面板目标：{firewallText(node.desired_firewall_mode)}
+          </strong>
           <p>
-            这个状态由节点服务器上的 Agent 配置上报。要切换严格防火墙，需要在节点的{" "}
-            <span className="mono">/etc/relaycore-agent/agent.env</span> 中设置{" "}
-            <span className="mono">RELAYCORE_FIREWALL_MODE=strict</span>，并确认{" "}
-            <span className="mono">RELAYCORE_SSH_PORTS</span> 包含你的 SSH 端口，然后重启{" "}
-            <span className="mono">relaycore-agent</span>。
+            管理员可以在节点列表点“设置”切换严格防火墙。严格模式会保留 SSH 端口{" "}
+            <span className="mono">{(node.firewall_ssh_ports?.length ? node.firewall_ssh_ports : [22]).join(",")}</span>{" "}
+            和当前转发端口；如果 Agent 在 {node.firewall_rollback_seconds || 60} 秒内无法向面板确认，会自动回滚。
           </p>
           <p>
             如果配置错误导致规则异常，可在节点执行 <span className="mono">relaycore-agent rescue</span> 清理 RelayCore

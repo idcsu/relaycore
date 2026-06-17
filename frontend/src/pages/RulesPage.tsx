@@ -10,6 +10,7 @@ import { PageActions } from "../components/PageActions";
 import { RuleCard } from "../components/RuleCard";
 import { RuleForm, type RulePayload } from "../components/RuleForm";
 import { RuleDrawer } from "../components/RuleDrawer";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { isAdminRole } from "../lib/labels";
 
 export function RulesPage() {
@@ -25,6 +26,7 @@ export function RulesPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<Rule | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [deleteRuleId, setDeleteRuleId] = useState<string | null>(null);
   const diagnosticsQuery = useDiagnostics(selectedId != null);
 
   const invalidate = () => {
@@ -64,6 +66,7 @@ export function RulesPage() {
     mutationFn: (id: string) => api(`/api/rules/${encodeURIComponent(id)}`, { method: "DELETE" }),
     onSuccess: () => {
       invalidate();
+      setDeleteRuleId(null);
       toast("规则已删除", "ok");
     },
     onError: (err: Error) => toast(err.message, "danger"),
@@ -85,6 +88,7 @@ export function RulesPage() {
   };
 
   const selectedRule = rules.find((r) => r.id === selectedId) || null;
+  const deleteRule = rules.find((r) => r.id === deleteRuleId) || null;
   const selectedNode = selectedRule ? nodes.find((n) => n.id === selectedRule.node_id) : undefined;
   const ruleDiagnosis = selectedRule
     ? (diagnosticsQuery.data?.rules || []).find((r) => r.rule_id === selectedRule.id) || null
@@ -133,9 +137,7 @@ export function RulesPage() {
                 setFormOpen(true);
               }}
               onToggle={() => toggleMutation.mutate(rule)}
-              onDelete={() => {
-                if (window.confirm("确认删除该规则？")) deleteMutation.mutate(rule.id);
-              }}
+              onDelete={() => setDeleteRuleId(rule.id)}
             />
           ))}
         </div>
@@ -171,6 +173,18 @@ export function RulesPage() {
           nodeDiagnosis={nodeDiagnosis}
           counters={counters}
           onClose={() => setSelectedId(null)}
+        />
+      )}
+
+      {deleteRule && (
+        <ConfirmDialog
+          title="删除转发规则"
+          detail={`确认删除“${deleteRule.name}”？删除后 Agent 下一次心跳会移除对应 nftables 规则。`}
+          confirmText="删除规则"
+          danger
+          loading={deleteMutation.isPending}
+          onConfirm={() => deleteMutation.mutate(deleteRule.id)}
+          onClose={() => setDeleteRuleId(null)}
         />
       )}
     </>

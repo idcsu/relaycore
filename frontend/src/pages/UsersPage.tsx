@@ -7,8 +7,9 @@ import { useAuth } from "../app/AuthContext";
 import { useToast } from "../app/ToastContext";
 import { Badge, CodeBox, EmptyState, HelperCard, Spinner } from "../components/ui";
 import { Modal } from "../components/Modal";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { PageActions } from "../components/PageActions";
-import { formatTime, } from "../lib/format";
+import { formatTime } from "../lib/format";
 import { roleText } from "../lib/labels";
 
 interface UserMutationResult {
@@ -32,6 +33,7 @@ export function UsersPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [result, setResult] = useState<{ title: string; detail: string } | null>(null);
   const [drafts, setDrafts] = useState<Record<string, RowDraft>>({});
+  const [resetUserId, setResetUserId] = useState<string | null>(null);
 
   const refreshUsers = () => queryClient.invalidateQueries({ queryKey: queryKeys.users });
 
@@ -70,6 +72,7 @@ export function UsersPage() {
       }),
     onSuccess: (data) => {
       refreshUsers();
+      setResetUserId(null);
       setResult({
         title: "新临时密码",
         detail: `${data.item.username}\n${data.temporary_password || "已设置为指定密码"}`,
@@ -94,6 +97,7 @@ export function UsersPage() {
 
   const roleOptions = (u: User) =>
     ALL_ROLES.filter((role) => role !== "super_admin" || user?.role === "super_admin" || u.role === "super_admin");
+  const resetUser = users.find((u) => u.id === resetUserId) || null;
 
   return (
     <>
@@ -185,9 +189,7 @@ export function UsersPage() {
                         <button
                           className="btn danger"
                           type="button"
-                          onClick={() => {
-                            if (window.confirm("确认重置该用户密码？")) resetMutation.mutate(u.id);
-                          }}
+                          onClick={() => setResetUserId(u.id)}
                         >
                           重置密码
                         </button>
@@ -243,6 +245,18 @@ export function UsersPage() {
             </div>
           </form>
         </Modal>
+      )}
+
+      {resetUser && (
+        <ConfirmDialog
+          title="重置用户密码"
+          detail={`确认重置“${resetUser.username}”的密码？系统会生成一个新的临时密码，只显示一次。`}
+          confirmText="重置密码"
+          danger
+          loading={resetMutation.isPending}
+          onConfirm={() => resetMutation.mutate(resetUser.id)}
+          onClose={() => setResetUserId(null)}
+        />
       )}
     </>
   );

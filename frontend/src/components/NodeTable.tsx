@@ -7,8 +7,9 @@ function NodeStatusBadge({ status }: { status?: string }) {
   return status === "online" ? <Badge tone="ok">在线</Badge> : <Badge tone="danger">离线</Badge>;
 }
 
-export function FirewallBadge({ mode }: { mode?: string }) {
-  return <Badge tone={firewallTone(mode)}>{firewallText(mode)}</Badge>;
+export function FirewallBadge({ mode, desired }: { mode?: string; desired?: string }) {
+  const text = desired && desired !== mode ? `${firewallText(mode)} / 目标 ${firewallText(desired)}` : firewallText(mode);
+  return <Badge tone={firewallTone(mode)}>{text}</Badge>;
 }
 
 export function NodeTable({
@@ -74,7 +75,7 @@ export function NodeTable({
                 </td>
                 <td className="cell-badges">
                   <Badge tone="info">{n.forwarding_mode || "nftables"}</Badge>
-                  <FirewallBadge mode={n.firewall_mode} />
+                  <FirewallBadge mode={n.firewall_mode} desired={n.desired_firewall_mode} />
                   <Badge tone="ok">{m.forwarding_rule_count || 0} 条规则</Badge>
                 </td>
                 <td className="mono">{n.public_ip || "-"}</td>
@@ -86,7 +87,7 @@ export function NodeTable({
                     {isAdmin && (
                       <>
                         <button className="btn" type="button" onClick={() => onEdit?.(n.id)}>
-                          重命名
+                          设置
                         </button>
                         <button className="btn danger" type="button" onClick={() => onDelete?.(n.id)}>
                           删除

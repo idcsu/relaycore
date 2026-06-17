@@ -300,12 +300,26 @@ func (s *Server) handleNodeByID(w http.ResponseWriter, r *http.Request, u common
 	switch r.Method {
 	case http.MethodPut:
 		var req struct {
-			Name string `json:"name"`
+			Name                    *string `json:"name"`
+			DesiredFirewallMode     *string `json:"desired_firewall_mode"`
+			FirewallMode            *string `json:"firewall_mode"`
+			FirewallSSHPorts        []int   `json:"firewall_ssh_ports"`
+			FirewallRollbackSeconds *int    `json:"firewall_rollback_seconds"`
 		}
 		if !decodeJSON(w, r, &req) {
 			return
 		}
-		updated, err := s.store.UpdateNode(id, req.Name, u, realIP(r))
+		mode := req.DesiredFirewallMode
+		if mode == nil {
+			mode = req.FirewallMode
+		}
+		updated, err := s.store.UpdateNodeSettings(id, NodeUpdate{
+			Name:                    req.Name,
+			DesiredFirewallMode:     mode,
+			FirewallSSHPorts:        req.FirewallSSHPorts,
+			FirewallSSHPortsSet:     req.FirewallSSHPorts != nil,
+			FirewallRollbackSeconds: req.FirewallRollbackSeconds,
+		}, u, realIP(r))
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -344,7 +358,7 @@ func (s *Server) handleNodeTokens(w http.ResponseWriter, r *http.Request, u comm
 			return
 		}
 		base := requestBaseURL(r)
-		install := fmt.Sprintf("relaycore-agent -panel %s -token %s", base, tok.PlainToken)
+		install := fmt.Sprintf("curl -fsSL https://raw.githubusercontent.com/idcsu/relaycore/main/scripts/install.sh | bash -s -- install-agent --panel %s --token %s", base, tok.PlainToken)
 		writeJSON(w, map[string]any{"item": tok, "install_command": install})
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -566,12 +580,12 @@ func (s *Server) handleAgentHeartbeat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "node id mismatch")
 		return
 	}
-	version, err := s.store.UpdateHeartbeat(req, realIP(r))
+	version, policy, err := s.store.UpdateHeartbeat(req, realIP(r))
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
-	resp := common.AgentHeartbeatResponse{ServerTime: time.Now(), RuleVersion: version}
+	resp := common.AgentHeartbeatResponse{ServerTime: time.Now(), RuleVersion: version, FirewallPolicy: policy}
 	if req.RuleVersion != version {
 		resp.Rules = s.store.RulesForNode(nodeID)
 		resp.Message = "rules updated"

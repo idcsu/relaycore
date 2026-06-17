@@ -17,10 +17,11 @@ export function NodesPage() {
     <>
       <HelperCard
         title="严格防火墙在哪里设置"
-        detail="当前严格防火墙由节点服务器上的 Agent 启动参数控制，不是在面板里直接切换。"
+        detail="在节点列表点“设置”，选择严格防火墙即可。Agent 会自动应用，并带有回滚保护。"
         steps={[
-          { title: "启用位置", detail: "在节点的 agent.env 或启动命令里设置 RELAYCORE_FIREWALL_MODE=strict。" },
-          { title: "安全机制", detail: "严格模式有回滚保护，面板确认不到节点时 Agent 会回滚防火墙。" },
+          { title: "先确认 SSH", detail: "保存前确认 SSH 保留端口包含你当前登录服务器用的端口。" },
+          { title: "一键切换", detail: "保存后等待 Agent 下一次心跳，节点会进入严格确认中。" },
+          { title: "自动回滚", detail: "如果面板确认不到节点，Agent 会按设置秒数自动回滚防火墙。" },
           { title: "救援命令", detail: "如果误配置，可在节点执行 relaycore-agent rescue 清理 RelayCore 规则。" },
         ]}
       />

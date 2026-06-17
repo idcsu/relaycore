@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux-amd64:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit
+          npm run build
+
+      - name: Test backend
+        run: |
+          go test ./...
+          go vet ./...
+
+      - name: Build release archive
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then VERSION="dev"; fi
+          make release VERSION="$VERSION"
+          cp "dist/relaycore-${VERSION}-linux-amd64.tar.gz" dist/relaycore-linux-amd64.tar.gz
+          cp "dist/relaycore-${VERSION}-linux-amd64.tar.gz.sha256" dist/relaycore-linux-amd64.tar.gz.sha256
+          (cd dist && sha256sum relaycore-linux-amd64.tar.gz "relaycore-${VERSION}-linux-amd64.tar.gz" > SHA256SUMS)
+
+      - name: Publish GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          NOTES="RelayCore ${VERSION} release. Use scripts/install.sh for one-click panel or agent installation."
+          gh release create "$GITHUB_REF_NAME" \
+            dist/relaycore-linux-amd64.tar.gz \
+            dist/relaycore-linux-amd64.tar.gz.sha256 \
+            dist/relaycore-${VERSION}-linux-amd64.tar.gz \
+            dist/relaycore-${VERSION}-linux-amd64.tar.gz.sha256 \
+            dist/SHA256SUMS \
+            --title "RelayCore ${VERSION}" \
+            --notes "$NOTES" \
+          || gh release upload "$GITHUB_REF_NAME" \
+            dist/relaycore-linux-amd64.tar.gz \
+            dist/relaycore-linux-amd64.tar.gz.sha256 \
+            dist/relaycore-${VERSION}-linux-amd64.tar.gz \
+            dist/relaycore-${VERSION}-linux-amd64.tar.gz.sha256 \
+            dist/SHA256SUMS \
+            --clobber

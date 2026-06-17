@@ -30,6 +30,30 @@ func TestNodeUpdateAndDelete(t *testing.T) {
 	if updated.Name != "renamed-node" {
 		t.Fatalf("unexpected node name: %q", updated.Name)
 	}
+	beforeFirewallVersion := store.RuleVersion()
+	mode := "strict"
+	rollback := 45
+	updated, err = store.UpdateNodeSettings(registered.NodeID, NodeUpdate{
+		DesiredFirewallMode:     &mode,
+		FirewallSSHPorts:        []int{2222, 22, 2222},
+		FirewallSSHPortsSet:     true,
+		FirewallRollbackSeconds: &rollback,
+	}, actor, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("update node firewall settings: %v", err)
+	}
+	if updated.DesiredFirewallMode != "strict" {
+		t.Fatalf("unexpected desired firewall mode: %q", updated.DesiredFirewallMode)
+	}
+	if got := updated.FirewallSSHPorts; len(got) != 2 || got[0] != 22 || got[1] != 2222 {
+		t.Fatalf("unexpected ssh ports: %#v", got)
+	}
+	if updated.FirewallRollbackSeconds != rollback {
+		t.Fatalf("unexpected rollback seconds: %d", updated.FirewallRollbackSeconds)
+	}
+	if store.RuleVersion() <= beforeFirewallVersion {
+		t.Fatalf("firewall update should bump rule version")
+	}
 	rule, err := store.SaveRule(common.ForwardRule{
 		Name:       "web",
 		NodeID:     registered.NodeID,

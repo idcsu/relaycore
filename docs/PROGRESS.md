@@ -38,6 +38,8 @@ Core principles:
 - Node registration with one-time token.
 - Node management:
   - node rename
+  - node firewall policy settings from the Panel
+  - strict firewall target mode, preserved SSH ports, and rollback seconds
   - node delete
   - deleting a node also removes its forwarding rules and related counter/report history
 - HMAC-signed Agent heartbeat with timestamp + nonce replay protection.
@@ -98,7 +100,8 @@ Core principles:
   - flushes/deletes `table inet relaycore_guard`
   - exits cleanly when a table does not exist
 - Strict firewall mode:
-  - opt-in with `-firewall strict`
+  - can be controlled from the Panel per node
+  - initial Agent env can still opt in with `-firewall strict`
   - preserves configured SSH ports with `-ssh-ports`
   - applies `inet relaycore_guard` after NAT rules
   - allows RelayCore `ct mark` so DNAT-to-local targets still work under strict input filtering
@@ -157,6 +160,9 @@ Panel diagnostics currently includes:
 - Field-level help text for rule creation and node onboarding.
 - Blue/indigo visual design with responsive layout, local font stack, status colors, gradients, drawer/toast/page animations, and no external assets.
 - Admin management actions for nodes and rules are exposed through table/card actions and drawers.
+- Node settings modal supports Panel-controlled strict firewall with SSH port and rollback settings.
+- Destructive actions use local CSS confirmation dialogs, not browser-native confirm boxes.
+- Large modal layout is top-aligned with internal scrolling so long rule forms remain reachable.
 - Dashboard traffic panel:
   - total RelayCore counter bytes
   - total packets/connections
@@ -234,6 +240,14 @@ Panel diagnostics currently includes:
   - `scripts/build-release.sh`
   - `make release VERSION=...`
   - packages binaries, web assets, deploy files, scripts, and docs
+- One-click GitHub installer:
+  - `scripts/install.sh install-panel`
+  - `scripts/install.sh install-agent`
+  - installs dependencies
+  - downloads GitHub Release assets
+  - writes env files
+  - enables and restarts systemd services
+- GitHub Actions release workflow builds and uploads linux/amd64 release archives on version tags.
 - Deployment guide includes:
   - Panel install
   - Agent install
@@ -249,6 +263,7 @@ Commands that passed:
 ```bash
 cd frontend && npm run build
 cd frontend && npm audit
+sh -n scripts/install.sh
 sh -n scripts/install-panel.sh
 sh -n scripts/install-agent.sh
 CGO_ENABLED=1 go test ./...

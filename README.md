@@ -136,7 +136,16 @@ Requirements: Node.js 20+ and npm.
 
 ## Install Panel
 
-On the Panel server:
+One-click install from GitHub Release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/idcsu/relaycore/main/scripts/install.sh | sudo bash -s -- install-panel --addr 0.0.0.0:10028
+```
+
+This installs dependencies, downloads the latest GitHub Release, writes
+`/etc/relaycore/panel.env`, installs the systemd service, and starts the Panel.
+
+Manual install from a downloaded release archive:
 
 ```bash
 tar -xzf relaycore-0.1.0-linux-amd64.tar.gz
@@ -157,6 +166,16 @@ Put the Panel behind HTTPS with Nginx or Caddy before production use.
 ## Install Agent
 
 Create a node token in the Panel, then run on the node:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/idcsu/relaycore/main/scripts/install.sh | sudo bash -s -- install-agent --panel https://relaycore.example.com --token your-node-token
+```
+
+This installs dependencies, downloads the latest GitHub Release, writes
+`/etc/relaycore-agent/agent.env`, installs the systemd service, and starts the
+Agent.
+
+Manual install from a downloaded release archive:
 
 ```bash
 tar -xzf relaycore-0.1.0-linux-amd64.tar.gz

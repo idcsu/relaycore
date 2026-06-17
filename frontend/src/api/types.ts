@@ -45,6 +45,9 @@ export interface Node {
   private_ips?: string[];
   forwarding_mode?: string;
   firewall_mode?: string;
+  desired_firewall_mode?: string;
+  firewall_ssh_ports?: number[];
+  firewall_rollback_seconds?: number;
   last_metrics?: NodeMetrics;
   last_ruleset?: string;
   last_error?: string;

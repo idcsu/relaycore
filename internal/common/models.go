@@ -4,7 +4,7 @@ import "time"
 
 const (
 	ProjectName = "RelayCore"
-	Version     = "0.1.0-dev"
+	Version     = "0.1.0"
 )
 
 type Role string
@@ -38,26 +38,29 @@ type Session struct {
 }
 
 type Node struct {
-	ID              string      `json:"id"`
-	Name            string      `json:"name"`
-	Secret          string      `json:"secret,omitempty"`
-	Status          string      `json:"status"`
-	Hostname        string      `json:"hostname"`
-	OS              string      `json:"os"`
-	Arch            string      `json:"arch"`
-	AgentVersion    string      `json:"agent_version"`
-	PublicIP        string      `json:"public_ip"`
-	PrivateIPs      []string    `json:"private_ips"`
-	ForwardingMode  string      `json:"forwarding_mode"`
-	FirewallMode    string      `json:"firewall_mode"`
-	RuleVersion     int64       `json:"rule_version"`
-	LastSeenAt      *time.Time  `json:"last_seen_at,omitempty"`
-	LastMetrics     NodeMetrics `json:"last_metrics"`
-	LastDiagnostics []Finding   `json:"last_diagnostics,omitempty"`
-	LastRuleset     string      `json:"last_ruleset,omitempty"`
-	LastError       string      `json:"last_error"`
-	CreatedAt       time.Time   `json:"created_at"`
-	UpdatedAt       time.Time   `json:"updated_at"`
+	ID                      string      `json:"id"`
+	Name                    string      `json:"name"`
+	Secret                  string      `json:"secret,omitempty"`
+	Status                  string      `json:"status"`
+	Hostname                string      `json:"hostname"`
+	OS                      string      `json:"os"`
+	Arch                    string      `json:"arch"`
+	AgentVersion            string      `json:"agent_version"`
+	PublicIP                string      `json:"public_ip"`
+	PrivateIPs              []string    `json:"private_ips"`
+	ForwardingMode          string      `json:"forwarding_mode"`
+	FirewallMode            string      `json:"firewall_mode"`
+	DesiredFirewallMode     string      `json:"desired_firewall_mode"`
+	FirewallSSHPorts        []int       `json:"firewall_ssh_ports"`
+	FirewallRollbackSeconds int         `json:"firewall_rollback_seconds"`
+	RuleVersion             int64       `json:"rule_version"`
+	LastSeenAt              *time.Time  `json:"last_seen_at,omitempty"`
+	LastMetrics             NodeMetrics `json:"last_metrics"`
+	LastDiagnostics         []Finding   `json:"last_diagnostics,omitempty"`
+	LastRuleset             string      `json:"last_ruleset,omitempty"`
+	LastError               string      `json:"last_error"`
+	CreatedAt               time.Time   `json:"created_at"`
+	UpdatedAt               time.Time   `json:"updated_at"`
 }
 
 type NodeToken struct {
@@ -150,13 +153,16 @@ type Finding struct {
 }
 
 type AgentRegisterRequest struct {
-	Token        string   `json:"token"`
-	Name         string   `json:"name"`
-	Hostname     string   `json:"hostname"`
-	OS           string   `json:"os"`
-	Arch         string   `json:"arch"`
-	AgentVersion string   `json:"agent_version"`
-	PrivateIPs   []string `json:"private_ips"`
+	Token           string   `json:"token"`
+	Name            string   `json:"name"`
+	Hostname        string   `json:"hostname"`
+	OS              string   `json:"os"`
+	Arch            string   `json:"arch"`
+	AgentVersion    string   `json:"agent_version"`
+	PrivateIPs      []string `json:"private_ips"`
+	FirewallMode    string   `json:"firewall_mode"`
+	SSHPorts        []int    `json:"ssh_ports"`
+	RollbackSeconds int      `json:"rollback_seconds"`
 }
 
 type AgentRegisterResponse struct {
@@ -185,10 +191,17 @@ type AgentHeartbeatRequest struct {
 }
 
 type AgentHeartbeatResponse struct {
-	ServerTime  time.Time     `json:"server_time"`
-	RuleVersion int64         `json:"rule_version"`
-	Rules       []ForwardRule `json:"rules"`
-	Message     string        `json:"message"`
+	ServerTime     time.Time      `json:"server_time"`
+	RuleVersion    int64          `json:"rule_version"`
+	Rules          []ForwardRule  `json:"rules"`
+	FirewallPolicy FirewallPolicy `json:"firewall_policy"`
+	Message        string         `json:"message"`
+}
+
+type FirewallPolicy struct {
+	Mode            string `json:"mode"`
+	SSHPorts        []int  `json:"ssh_ports"`
+	RollbackSeconds int    `json:"rollback_seconds"`
 }
 
 type APIError struct {
