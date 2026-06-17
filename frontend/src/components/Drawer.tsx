@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 export function Drawer({
   title,
@@ -23,7 +24,7 @@ export function Drawer({
     };
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div className="drawer-backdrop" onMouseDown={onClose}>
       <aside className="drawer" aria-label={title} onMouseDown={(e) => e.stopPropagation()}>
         <header className="drawer-head">
@@ -37,7 +38,8 @@ export function Drawer({
         </header>
         <div className="drawer-body">{children}</div>
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 export function Modal({
   title,
@@ -25,7 +26,7 @@ export function Modal({
     };
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div className="modal" style={{ maxWidth: width }} onMouseDown={(e) => e.stopPropagation()}>
         <header className="modal-head">
@@ -39,6 +40,7 @@ export function Modal({
         </header>
         <div className="modal-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

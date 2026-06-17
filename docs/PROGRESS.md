@@ -387,6 +387,7 @@ Last rule-loop validation result:
 3. 720px 断点新增：`.drawer` 宽度设为 `100%`（全宽）。
 4. 新增 `.drawer .codebox { max-height: 320px; overflow: auto; }` — 抽屉内的代码片段限高 320px 并支持滚动。
 5. **根因修复**：新增 `@keyframes fadeIn`（仅 opacity，不含 transform），`.content` 改用 `fadeIn` 替代 `fadeUp`，消除 `transform: translateY(0)` 对 fixed 定位的影响。弹窗和抽屉现在正确相对于视口定位，不再被侧边栏遮挡。
+6. **层叠上下文修复**：`Modal` 和 `Drawer` 组件改用 `createPortal` 渲染到 `document.body`，脱离 `.content` 的层叠上下文。`.content` 的 `animation` 属性会创建层叠上下文，导致弹窗的 `z-index:25` 被限制在 `.content` 内，无法超过同级的 `.topbar`（`z-index:4`），弹窗顶部被 topbar 遮挡。Portal 后弹窗直接在 body 层级，z-index 正确生效。
 
 已重新构建前端，产物输出到 `web/`。
 
