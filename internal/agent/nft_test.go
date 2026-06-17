@@ -36,6 +36,9 @@ func TestRenderNFTablesUsesCounterMaps(t *testing.T) {
 		"counter rc_rul_test_tcp",
 		"map tcp_counters",
 		"10028 : rc_rul_test_tcp",
+		"type nat hook prerouting priority -100; policy accept;",
+		"type nat hook output priority -100; policy accept;",
+		"type nat hook postrouting priority 100; policy accept;",
 		"ct mark set 0x00052435",
 		"counter name tcp dport map @tcp_counters",
 	} {

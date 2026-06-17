@@ -20,7 +20,15 @@ Verified on a disposable Ubuntu 24.04 VPS:
 - Strict firewall mode and rollback path verified.
 - Docker/1Panel-style `FORWARD policy DROP` compatibility verified.
 
-Debian 12 should be very close to Ubuntu, but it still needs a quick smoke test because nftables, iptables-nft, Docker, and default firewall behavior can vary by image.
+Verified on a disposable Debian 12 VPS:
+
+- Panel and Agent deployed with systemd after installing `libsqlite3-0`.
+- nftables 1.0.6 compatibility verified with numeric NAT priorities.
+- Public TCP forwarding to local and external targets verified.
+- Local UDP forwarding verified from the node.
+- `relaycore-agent rescue` verified.
+- Strict firewall mode verified.
+- Public UDP packets did not reach nftables on that VPS, so public UDP ingress was treated as a provider/network limitation for that test node.
 
 ## Does It Need Docker?
 
@@ -75,6 +83,13 @@ Agent:
 - nftables.
 - root or equivalent nftables permissions.
 - `net.ipv4.ip_forward=1` for cross-host forwarding.
+
+Minimal Debian/Ubuntu images may need:
+
+```bash
+apt-get update
+apt-get install -y libsqlite3-0 nftables
+```
 
 ## Build
 
@@ -162,6 +177,5 @@ This removes RelayCore-managed nftables tables and its RelayCore `ct mark` compa
 - IPv4 forwarding only.
 - SQLite storage is currently snapshot-style, not a normalized relational schema.
 - UDP probes can only verify basic send-path behavior.
-- More OS/firewall combinations still need smoke testing.
+- More firewall combinations still need smoke testing.
 - flowtable acceleration is not enabled yet.
-

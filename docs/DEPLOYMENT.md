@@ -8,6 +8,13 @@
 - 跨主机转发需要 `net.ipv4.ip_forward=1`。
 - 建议先在一次性 VPS 上测试非 dry-run nftables apply，再迁移生产节点。
 
+Debian/Ubuntu 极简镜像可先安装：
+
+```bash
+apt-get update
+apt-get install -y libsqlite3-0 nftables
+```
+
 ## 构建 Release
 
 在项目根目录执行：

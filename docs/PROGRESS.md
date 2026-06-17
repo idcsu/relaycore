@@ -114,6 +114,7 @@ Core principles:
 - Uses `nft -c -f` before apply.
 - Uses batch `nft -f` apply.
 - Avoids empty `elements = { }`, which nftables rejects.
+- Uses numeric NAT priorities for Debian 12 / nftables 1.0.6 compatibility.
 
 ### Diagnostics
 
@@ -273,6 +274,22 @@ Additional checks:
   - strict mode was verified with real Panel confirmation; node reported `strict`.
   - Docker/1Panel `FORWARD policy DROP` blocked forwarding to external targets until RelayCore `ct mark` compatibility was added and validated.
   - strict input filtering blocked DNAT-to-local targets until RelayCore `ct mark` input allow was added and validated.
+- Debian 12 disposable VPS integration verified:
+  - Debian 12 / Linux 6.1 / nftables 1.0.6.
+  - Minimal image required `libsqlite3-0`, `curl`, and `python3` for this test flow.
+  - Panel installed under systemd.
+  - Agent installed under systemd and registered.
+  - Initial nftables apply failed because Debian nftables 1.0.6 rejected `output priority dstnat`.
+  - Agent was fixed to render numeric NAT priorities; rules then applied successfully.
+  - Public TCP forwarding to local backend returned `200`.
+  - Public TCP forwarding to external target returned `403` from the target service, proving connection path.
+  - Local UDP forwarding through RelayCore worked from the node.
+  - Public UDP packets did not hit RelayCore counters on this VPS, including direct backend UDP, indicating provider/network UDP ingress filtering.
+  - Per-rule nftables counters synced to Panel.
+  - Diagnostics reported health `100` and no global findings.
+  - `relaycore-agent rescue` removed `table ip relaycore` and tolerated missing `table inet relaycore_guard`.
+  - strict mode was verified with real Panel confirmation; node reported `strict`.
+  - strict public TCP forwarding to local and external targets worked.
 - Full rule loop verified:
   - Panel created rule.
   - Agent pulled rule.
@@ -293,12 +310,11 @@ Last rule-loop validation result:
 - nftables forwarding is IPv4 only.
 - UDP probe can only confirm send-path basics, not true application-layer response.
 - flowtable acceleration is not implemented.
-- Disposable VPS validation has been done on Ubuntu 24.04; more distributions/firewall stacks should still be tested before broad production rollout.
+- Disposable VPS validation has been done on Ubuntu 24.04 and Debian 12; more firewall stacks should still be tested before broad production rollout.
 
 ## Next Recommended Steps
 
 1. Broaden integration testing:
-   - Debian 12 minimal
    - Ubuntu without Docker/1Panel
    - a node with native nftables-only firewall chains
    - target behind private network/VPN
