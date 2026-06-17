@@ -961,6 +961,11 @@ tr:last-child td {
   line-height: 1.65;
 }
 
+.drawer .codebox {
+  max-height: 320px;
+  overflow: auto;
+}
+
 /* ---------- toast ---------- */
 .toast-stack {
   position: fixed;
@@ -1220,6 +1225,7 @@ tr:last-child td {
 .modal {
   width: 100%;
   max-height: calc(100vh - 80px);
+  margin: auto;
   display: grid;
   grid-template-rows: auto 1fr;
   overflow: hidden;
@@ -1581,6 +1587,12 @@ tr:last-child td {
   .event-filter {
     grid-template-columns: 1fr;
   }
+  .modal-backdrop {
+    padding: 24px 12px;
+  }
+  .drawer {
+    width: min(560px, 100%);
+  }
 }
 
 @media (max-width: 720px) {
@@ -1658,6 +1670,9 @@ tr:last-child td {
   }
   .drawer-head {
     flex-direction: column;
+  }
+  .drawer {
+    width: 100%;
   }
   .qr-card {
     width: min(220px, 100%);

@@ -1,6 +1,6 @@
 # RelayCore 进度记录
 
-最后更新：2026-06-17
+最后更新：2026-06-18
 
 ## 方向
 
@@ -361,8 +361,33 @@ Last rule-loop validation result:
 - nftables forwarding is IPv4 only.
 - UDP probe can only confirm send-path basics, not true application-layer response.
 - flowtable acceleration is not implemented.
-- UI visual review is pending user feedback from the Debian public preview.
 - Disposable VPS validation has been done on Ubuntu 24.04 and Debian 12; more firewall stacks should still be tested before broad production rollout.
+
+## 前端修复记录
+
+### 2026-06-18：弹窗/抽屉遮挡 + Ruleset 显示不全修复
+
+问题：
+
+1. Modal 弹窗（新增规则、编辑规则、节点设置等）在中等屏幕宽度下显示不全，半边屏幕被遮挡。
+2. Drawer 抽屉（节点详情、规则详情）在中小屏幕上宽度过大，内容被遮挡。
+3. 节点详情和规则详情中的 Ruleset 片段/预览内容过长时显示不全，无法滚动查看。
+
+原因：
+
+- `.modal` 缺少 `margin: auto`，在 flex 容器中弹窗未能正确居中，内容高时顶部对齐导致遮挡。
+- 980px 中等宽度断点缺少对 `.modal-backdrop` padding 和 `.drawer` 宽度的响应式调整。
+- 720px 小屏断点缺少 `.drawer` 全宽规则。
+- `.codebox` 在 Drawer 内使用时没有 `max-height` 和 `overflow` 限制，长内容撑开整个抽屉。
+
+修复（`frontend/src/styles/index.css`）：
+
+1. `.modal` 加 `margin: auto` — 弹窗在视口中正确居中，内容超出时可滚动。
+2. 980px 断点新增：`.modal-backdrop` padding 从 `40px 20px` 减至 `24px 12px`；`.drawer` 宽度从 `min(760px, 100%)` 减至 `min(560px, 100%)`。
+3. 720px 断点新增：`.drawer` 宽度设为 `100%`（全宽）。
+4. 新增 `.drawer .codebox { max-height: 320px; overflow: auto; }` — 抽屉内的代码片段限高 320px 并支持滚动。
+
+已重新构建前端，产物输出到 `web/`。
 
 ## Next Recommended Steps
 
