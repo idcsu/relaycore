@@ -44,7 +44,8 @@ RelayCore does not require Docker for either the Panel or the Agent.
 
 - `relaycore-panel`: Web UI and API server.
 - `relaycore-agent`: Node-side nftables manager and metrics reporter.
-- `web/`: Local static frontend assets. No CDN.
+- `frontend/`: React + Vite + TypeScript frontend source.
+- `web/`: Built static frontend assets served by the Panel. No CDN.
 - `scripts/`: Install and release scripts.
 - `deploy/`: systemd service templates.
 - `docs/`: Architecture, deployment, nftables, and progress notes.
@@ -104,6 +105,34 @@ make release VERSION=0.1.0
 ```
 
 Artifacts are written to `dist/`.
+
+## Frontend
+
+The Panel UI is a React + Vite + TypeScript single-page app. Source lives in
+`frontend/`; the production build is emitted into `web/`, which the Panel serves
+as plain static files. No runtime CDN is used; all assets are same-origin.
+
+The built assets in `web/` are committed so deployments do not require Node.js.
+Rebuild them whenever the frontend source changes:
+
+```bash
+make web
+# or:
+cd frontend && npm install && npm run build
+```
+
+For local development with hot reload, run the Panel first, then the Vite dev
+server, which proxies API requests to the Panel:
+
+```bash
+cd frontend
+npm install
+npm run dev
+# override the API target if the Panel listens elsewhere:
+VITE_PROXY_TARGET=http://127.0.0.1:10028 npm run dev
+```
+
+Requirements: Node.js 20+ and npm.
 
 ## Install Panel
 

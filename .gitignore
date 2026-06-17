@@ -6,3 +6,11 @@ dist/
 *.log
 *.tmp
 .DS_Store
+
+# Local Node toolchain used to build the frontend
+.toolchain/
+
+# Frontend build tooling
+frontend/node_modules/
+frontend/.vite/
+frontend/*.tsbuildinfo

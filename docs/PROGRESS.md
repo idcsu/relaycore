@@ -21,7 +21,8 @@ Core principles:
 - Shared models/security helpers: `internal/common`
 - Panel API/store: `internal/panel`
 - Agent nftables/metrics/probe logic: `internal/agent`
-- Local static UI: `web`
+- Frontend source: `frontend`
+- Built static UI: `web`
 - Deployment templates/scripts: `deploy`, `scripts`
 - Deployment guide: `docs/DEPLOYMENT.md`
 
@@ -146,13 +147,16 @@ Panel diagnostics currently includes:
 
 ### Frontend
 
-- Local `index.html`, `styles.css`, `app.js`.
-- No CDN.
-- Simplified Chinese panel UI.
+- React + Vite + TypeScript single-page app in `frontend/`.
+- Production build emitted into `web/` and served by the Panel as same-origin static assets.
+- No CDN or external runtime assets.
+- Built `web/` assets are committed so production deploys do not require Node.js.
+- Simplified Chinese panel UI for beginner users.
 - Beginner-friendly helper cards for first-use flow, rule creation, diagnostics, node onboarding, users, and TOTP.
 - Chinese status labels for node state, rule enabled/apply state, firewall mode, probes, and user roles.
 - Field-level help text for rule creation and node onboarding.
-- Blue/indigo local CSS visual design with responsive layout, local font stack, status colors, gradients, drawer/toast/page animations, and no external assets.
+- Blue/indigo visual design with responsive layout, local font stack, status colors, gradients, drawer/toast/page animations, and no external assets.
+- Admin management actions for nodes and rules are exposed through table/card actions and drawers.
 - Dashboard traffic panel:
   - total RelayCore counter bytes
   - total packets/connections
@@ -243,9 +247,8 @@ Panel diagnostics currently includes:
 Commands that passed:
 
 ```bash
-node --check web/app.js
-node --check web/qr.js
-node -e "brace check for web/styles.css and web/app.js"
+cd frontend && npm run build
+cd frontend && npm audit
 sh -n scripts/install-panel.sh
 sh -n scripts/install-agent.sh
 CGO_ENABLED=1 go test ./...
@@ -319,10 +322,10 @@ Additional checks:
   - strict public TCP forwarding to local and external targets worked.
 - Debian 12 public UI preview:
   - Panel kept publicly reachable at `http://83.228.227.152:10028` for user review.
-  - Latest local CSS/JS UI assets deployed with the release archive.
+  - Latest local UI assets deployed with the release archive.
   - Public HTTP check returned `200`.
-  - Public `styles.css` confirmed the new local CSS design.
-  - Public `app.js` confirmed the Simplified Chinese beginner guidance.
+  - Public built CSS asset confirmed the local CSS design.
+  - Public built JS asset confirmed the Simplified Chinese beginner guidance.
 - Full rule loop verified:
   - Panel created rule.
   - Agent pulled rule.
@@ -374,7 +377,8 @@ Then run:
 
 ```bash
 git status --short
-node --check web/app.js
+cd frontend && npm run build
+cd frontend && npm audit
 CGO_ENABLED=1 go test ./...
 CGO_ENABLED=1 go vet ./...
 ```
