@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# RelayCore Agent 安装脚本（release 包内使用）
+# 由 install.sh 下载 release 后调用，也可手动从 release 包执行
+
 BIN="${BIN:-/usr/local/bin/relaycore-agent}"
 DATA_DIR="${DATA_DIR:-/etc/relaycore-agent}"
 ENV_FILE="${ENV_FILE:-${DATA_DIR}/agent.env}"
@@ -69,3 +72,4 @@ systemctl enable relaycore-agent
 systemctl restart relaycore-agent
 echo "RelayCore Agent 已启动。首次接入请使用面板生成的 relaycore-agent -panel ... -token ... 命令运行一次。"
 echo "也可以编辑 ${ENV_FILE} 填入 RELAYCORE_PANEL 和 RELAYCORE_TOKEN 后重启服务。"
+echo "如遇 nftables 配置异常，可执行救援命令：relaycore-agent rescue"

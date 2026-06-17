@@ -389,6 +389,38 @@ Last rule-loop validation result:
 
 已重新构建前端，产物输出到 `web/`。
 
+### 2026-06-18：安装脚本完善 + Panel 密码重置功能
+
+问题：
+
+原 install.sh 仅支持 install-panel 和 install-agent 两个子命令，缺少更新、卸载、备份、恢复、重置密码、修改监听、状态查看、日志查看、重启、救援等管理功能。参照 RelayGuard 的管理脚本，需要完善为完整的交互式管理工具。
+
+改动：
+
+1. `cmd/relaycore-panel/main.go`：
+   - 新增 `-reset-admin-password` 标志，支持从命令行重置管理员密码后退出（不启动服务）。
+   - 重置逻辑：打开 store → 按 username 查找 super_admin → 调用 ResetUserPassword → 打印新密码。
+   - 如果找不到指定用户名的 super_admin，则回退到第一个 super_admin。
+
+2. `scripts/install.sh`（完整重写）：
+   - 新增 Panel 管理菜单（10 项）：安装、更新、卸载、状态、日志、重启、备份、恢复、重置密码、修改监听。
+   - 新增 Agent 管理菜单（7 项）：安装、更新、卸载、状态、日志、重启、nftables 救援。
+   - 新增交互式参数补全：缺少 --panel/--token 时自动提示输入。
+   - 新增 SSH 端口自动检测（从 SSH_CONNECTION、ss、sshd_config 三处检测）。
+   - 新增 SHA256 校验（下载 release 时验证完整性）。
+   - 新增更新功能：下载新版本 → 停止服务 → 备份旧二进制 → 替换 → 重启。
+   - 新增卸载功能：停止/禁用服务 → 可选清理 nftables → 删除二进制/数据/配置。
+   - 新增备份/恢复：打包数据+配置到 /root/relaycore-backup/，恢复支持 .tar.gz 和 .db 格式。
+   - 新增重置密码：停止 Panel → 调用 -reset-admin-password → 重启。
+   - 新增修改监听地址：交互输入新地址 → 更新 env 文件 → 重启。
+   - 支持 arm64 架构检测。
+   - 保留原有的非交互模式：install-panel / install-agent 直接传参安装。
+   - 新增快捷命令：update-panel、update-agent、uninstall-panel、uninstall-agent、status、logs、restart、backup、restore、reset-password、configure-listen、rescue。
+
+3. `scripts/install-panel.sh` 和 `scripts/install-agent.sh`：保持作为 release 包内安装脚本，格式对齐。
+
+4. `README.md`：新增 Panel 管理脚本和 Agent 管理脚本的使用说明。
+
 ## Next Recommended Steps
 
 1. Review the updated Simplified Chinese UI on the Debian preview panel and adjust spacing, wording, or workflow pain points from feedback.

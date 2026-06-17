@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# RelayCore Panel 安装脚本（release 包内使用）
+# 由 install.sh 下载 release 后调用，也可手动从 release 包执行
+
 BIN="${BIN:-/usr/local/bin/relaycore-panel}"
 WEB_DIR="${WEB_DIR:-/opt/relaycore/web}"
 DATA_DIR="${DATA_DIR:-/var/lib/relaycore}"
@@ -19,6 +22,7 @@ if [ ! -x "./relaycore-panel" ]; then
   exit 1
 fi
 
+# 创建系统用户
 if ! id "$RUN_USER" >/dev/null 2>&1; then
   useradd --system --home-dir "$DATA_DIR" --shell /usr/sbin/nologin "$RUN_USER"
 fi

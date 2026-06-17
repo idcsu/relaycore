@@ -172,6 +172,35 @@ journalctl -u relaycore-panel -n 80 --no-pager
 
 生产环境请把 Panel 放到 Nginx 或 Caddy 后面，并启用 HTTPS。
 
+## Panel 管理脚本
+
+安装完成后，可以使用管理脚本进行日常维护：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/idcsu/relaycore/main/scripts/install.sh | sudo bash -s -- menu
+```
+
+或者直接下载到本地：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/idcsu/relaycore/main/scripts/install.sh -o /usr/local/bin/relaycore-manage
+chmod +x /usr/local/bin/relaycore-manage
+relaycore-manage menu
+```
+
+面板管理菜单功能：
+
+1. 安装面板
+2. 更新面板（自动备份旧版本二进制）
+3. 卸载面板（可选清理数据和配置）
+4. 查看面板状态
+5. 查看面板日志
+6. 重启面板
+7. 备份数据（打包数据和配置到 /root/relaycore-backup/）
+8. 恢复数据（支持 .tar.gz 和 .db 格式）
+9. 重置管理员密码
+10. 修改监听地址/端口
+
 ## 一键安装 Agent
 
 先在 Panel 中创建节点 token，然后在节点上执行：
@@ -197,6 +226,24 @@ Agent 的配置会保存在：
 ```
 
 一次性 token 在注册成功后会被清空。
+
+## Agent 管理脚本
+
+在节点上可以使用 Agent 管理脚本进行维护：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/idcsu/relaycore/main/scripts/install.sh | sudo bash -s -- menu-agent
+```
+
+Agent 管理菜单功能：
+
+1. 安装 Agent
+2. 更新 Agent（自动备份旧版本二进制）
+3. 卸载 Agent（可选清理 nftables 规则和数据）
+4. 查看 Agent 状态
+5. 查看 Agent 日志
+6. 重启 Agent
+7. 防火墙救援模式（清理 RelayCore 管理的 nftables 表）
 
 ## 严格防火墙模式
 
