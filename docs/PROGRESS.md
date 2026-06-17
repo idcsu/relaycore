@@ -1,264 +1,264 @@
-# RelayCore Progress
+# RelayCore 进度记录
 
-Last updated: 2026-06-17
+最后更新：2026-06-17
 
-## Direction
+## 方向
 
-RelayCore is being built as a low-overhead multi-node port forwarding panel for small VPS nodes such as 1 core / 1 GB RAM.
+RelayCore 正在被打造为一个面向小型 VPS 节点的低开销多节点端口转发面板，适合 1 核 1G 这类机器。
 
-Core principles:
+核心原则：
 
-- Agent stays lightweight.
-- Forwarding goes through Linux nftables/kernel NAT by default.
-- Panel handles management, security, persistence, diagnostics, and UI.
-- Frontend assets are local only. No CDN.
-- Security and observability are built in from the beginning.
+- Agent 保持轻量。
+- 默认走 Linux nftables / kernel NAT 转发。
+- Panel 负责管理、安全、持久化、诊断和界面。
+- 前端资源只保留本地文件，不依赖 CDN。
+- 安全和可观测性从一开始就内置。
 
-## Current Architecture
+## 当前架构
 
-- Panel binary: `cmd/relaycore-panel`
-- Agent binary: `cmd/relaycore-agent`
-- Shared models/security helpers: `internal/common`
-- Panel API/store: `internal/panel`
-- Agent nftables/metrics/probe logic: `internal/agent`
-- Frontend source: `frontend`
-- Built static UI: `web`
-- Deployment templates/scripts: `deploy`, `scripts`
-- Deployment guide: `docs/DEPLOYMENT.md`
+- Panel 二进制：`cmd/relaycore-panel`
+- Agent 二进制：`cmd/relaycore-agent`
+- 共享模型和安全辅助：`internal/common`
+- Panel API / 存储：`internal/panel`
+- Agent nftables / 指标 / 探测逻辑：`internal/agent`
+- 前端源码：`frontend`
+- 已构建静态 UI：`web`
+- 部署模板和脚本：`deploy`、`scripts`
+- 部署指南：`docs/DEPLOYMENT.md`
 
-## Implemented
+## 已完成
 
 ### Panel
 
-- Login with HttpOnly SameSite session cookie.
-- Login failure throttling.
-- Basic security headers and Origin check.
-- SQLite-backed snapshot storage using system `libsqlite3` through CGO.
-- Legacy import path from `relaycore.json` to `relaycore.db`.
-- Node registration with one-time token.
-- Node management:
-  - node rename
-  - node firewall policy settings from the Panel
-  - strict firewall target mode, preserved SSH ports, and rollback seconds
-  - node delete
-  - deleting a node also removes its forwarding rules and related counter/report history
-- HMAC-signed Agent heartbeat with timestamp + nonce replay protection.
-- Rule CRUD.
-- Node list.
-- Node token list/create.
-- User management:
-  - user list/create
-  - role update
-  - disabled users
-  - password reset
-  - non-admin rule list is filtered to owned rules
-  - self-disable/self-demotion protection
-  - last enabled `super_admin` protection
-- Event/audit list.
-- Dashboard summary.
-- Diagnostics API.
+- 使用 HttpOnly + SameSite 的 session cookie 登录。
+- 登录失败限流。
+- 基础安全响应头和 Origin 校验。
+- 通过 CGO 使用系统 `libsqlite3` 的 SQLite-backed snapshot 存储。
+- 支持从 `relaycore.json` 迁移到 `relaycore.db`。
+- 节点一次性 token 注册。
+- 节点管理：
+  - 节点改名
+  - 在 Panel 里设置节点防火墙策略
+  - 严格模式目标、保留 SSH 端口和回滚秒数
+  - 删除节点
+  - 删除节点时同步移除该节点的转发规则和相关 counter / report 历史
+- 带时间戳和 nonce 防重放的 HMAC Agent 心跳。
+- 规则增删改查。
+- 节点列表。
+- 节点 token 列表和创建。
+- 用户管理：
+  - 用户列表和创建
+  - 角色更新
+  - 禁用用户
+  - 重置密码
+  - 非管理员只能看到自己创建的规则
+  - 防止自禁用 / 自降权
+  - 防止最后一个 `super_admin` 被禁用
+- 事件 / 审计列表。
+- 总览摘要。
+- 诊断 API。
 
-### Security
+### 安全
 
-- Password hashing with PBKDF2-SHA256.
-- TOTP generation and verification.
-- TOTP setup requires current password.
-- TOTP QR code is rendered locally in the browser.
-- TOTP enable requires a pending server-generated secret.
-- TOTP login replay protection by time counter.
-- TOTP disable requires password and current code.
+- PBKDF2-SHA256 密码哈希。
+- TOTP 生成和校验。
+- 启用 TOTP 需要当前密码。
+- TOTP QR 码在浏览器本地渲染。
+- 启用 TOTP 需要服务端生成的 pending secret。
+- TOTP 登录使用时间计数器防重放。
+- 停用 TOTP 需要密码和当前验证码。
 
 ### Agent
 
-- Register with one-time token.
-- Store node config with `0600` permissions.
-- HMAC heartbeat.
-- Lightweight `/proc` metrics:
+- 一次性 token 注册。
+- 节点配置按 `0600` 权限保存。
+- HMAC 心跳。
+- 轻量 `/proc` 指标：
   - load
   - memory
   - disk
   - net I/O
   - uptime
-  - conntrack count/max
-  - TCP retrans/out segment counters
-- nftables ruleset rendering.
-- dry-run mode.
-- Immediate post-apply status heartbeat after rule version changes.
-- Rule-level apply reports:
+  - conntrack count / max
+  - TCP retrans / out segment counters
+- nftables 规则集渲染。
+- dry-run 模式。
+- 规则版本变化后立即补发一次状态心跳。
+- 规则级应用报告：
   - `applied`
   - `dry_run`
   - `error`
   - `skipped`
-- Rule-level lightweight target probes:
-  - TCP dial check
-  - UDP send check
-- Ruleset preview returned to Panel in dry-run or normal mode.
-- Rescue command:
+- 规则级轻量目标探测：
+  - TCP 连接探测
+  - UDP 发送探测
+- dry-run 或正常模式下都会把 ruleset preview 回传给 Panel。
+- 救援命令：
   - `relaycore-agent rescue`
-  - prints RelayCore-managed nftables tables before cleanup
-  - flushes/deletes `table ip relaycore`
-  - flushes/deletes `table inet relaycore_guard`
-  - exits cleanly when a table does not exist
-- Strict firewall mode:
-  - can be controlled from the Panel per node
-  - initial Agent env can still opt in with `-firewall strict`
-  - preserves configured SSH ports with `-ssh-ports`
-  - applies `inet relaycore_guard` after NAT rules
-  - allows RelayCore `ct mark` so DNAT-to-local targets still work under strict input filtering
-  - reports `strict_pending` while waiting for Panel confirmation
-  - cancels rollback only after the post-apply Panel heartbeat succeeds
-  - restores the previous guard table, or deletes the new one, if confirmation times out
+  - 清理前打印 RelayCore 管理的 nftables 表
+  - flush / delete `table ip relaycore`
+  - flush / delete `table inet relaycore_guard`
+  - 某张表不存在时也能正常退出
+- 严格防火墙模式：
+  - 可由 Panel 按节点控制
+  - Agent 初始环境也可通过 `-firewall strict` 手动启用
+  - 通过 `-ssh-ports` 保留指定 SSH 端口
+  - 在 NAT 规则后应用 `inet relaycore_guard`
+  - 允许 RelayCore `ct mark`，确保 DNAT 到本机后端时还能通过严格输入过滤
+  - 等待 Panel 确认时上报 `strict_pending`
+  - 只有 Panel 心跳确认成功后才取消回滚
+  - 如果确认超时，则恢复旧 guard 表或删除新建表
 
 ### nftables
 
-- IPv4 NAT table: `ip relaycore`.
-- Optional strict firewall table: `inet relaycore_guard`.
-- Uses nftables `set` for listener ports.
-- Uses nftables `map` for port to target IP/port mapping.
-- Uses named counter objects per rule/protocol.
-- Uses port to counter object maps.
-- Marks RelayCore-managed connections with `ct mark`.
-- Attempts to add a narrow `FORWARD` accept rule for that mark when an existing `ip filter FORWARD` chain is present.
-- Uses `nft -c -f` before apply.
-- Uses batch `nft -f` apply.
-- Avoids empty `elements = { }`, which nftables rejects.
-- Uses numeric NAT priorities for Debian 12 / nftables 1.0.6 compatibility.
+- IPv4 NAT 表：`ip relaycore`。
+- 可选严格防火墙表：`inet relaycore_guard`。
+- 使用 nftables `set` 存监听端口。
+- 使用 nftables `map` 存端口到目标 IP / 端口的映射。
+- 每条规则 / 协议都使用 named counter。
+- 使用端口到 counter 对象的 map。
+- 对 RelayCore 管理的连接打 `ct mark`。
+- 如果存在 `ip filter FORWARD` 链，会尽量在上面添加一条只放行该 mark 的规则，兼容 Docker / 1Panel。
+- 应用前先执行 `nft -c -f`。
+- 再用批量 `nft -f` 统一应用。
+- 避免生成空的 `elements = { }`，因为 nftables 不接受。
+- 使用数值化 NAT priorities，以兼容 Debian 12 / nftables 1.0.6。
 
-### Diagnostics
+### 诊断
 
-Panel diagnostics currently includes:
+Panel 诊断目前包含：
 
-- Node online/offline status.
-- Node health score.
-- conntrack pressure.
-- memory pressure.
-- TCP retransmission ratio.
-- Agent errors.
-- Agent-sent nft/apply errors.
-- Rule apply state.
-- Rule target IP after Agent resolution.
-- Rule target probe results.
-- Rule counter totals.
-- Rule counter delta/rate.
-- Target DNS/IP history.
-- Node conntrack trend.
-- Node TCP retransmission delta.
-- Likely cause summary per rule.
-- stale counter warning.
-- no-counter/no-traffic informational findings.
-- ruleset preview per node.
+- 节点在线 / 离线状态。
+- 节点健康分数。
+- conntrack 压力。
+- 内存压力。
+- TCP 重传比。
+- Agent 错误。
+- Agent 上报的 nft / apply 错误。
+- 规则应用状态。
+- Agent 解析后的目标 IP。
+- 规则目标探测结果。
+- 规则 counter 总量。
+- 规则 counter 增量 / 速率。
+- 目标 DNS / IP 历史。
+- 节点 conntrack 趋势。
+- 节点 TCP 重传变化量。
+- 每条规则的可能原因摘要。
+- counter 过期告警。
+- 无 counter / 无流量提示。
+- 每个节点的 ruleset 预览。
 
-### Frontend
+### 前端
 
-- React + Vite + TypeScript single-page app in `frontend/`.
-- Production build emitted into `web/` and served by the Panel as same-origin static assets.
-- No CDN or external runtime assets.
-- Built `web/` assets are committed so production deploys do not require Node.js.
-- Simplified Chinese panel UI for beginner users.
-- Beginner-friendly helper cards for first-use flow, rule creation, diagnostics, node onboarding, users, and TOTP.
-- Chinese status labels for node state, rule enabled/apply state, firewall mode, probes, and user roles.
-- Field-level help text for rule creation and node onboarding.
-- Blue/indigo visual design with responsive layout, local font stack, status colors, gradients, drawer/toast/page animations, and no external assets.
-- Admin management actions for nodes and rules are exposed through table/card actions and drawers.
-- Node settings modal supports Panel-controlled strict firewall with SSH port and rollback settings.
-- Destructive actions use local CSS confirmation dialogs, not browser-native confirm boxes.
-- Large modal layout is top-aligned with internal scrolling so long rule forms remain reachable.
-- Dashboard traffic panel:
-  - total RelayCore counter bytes
-  - total packets/connections
-  - TCP/UDP split
-  - top rules by traffic
-- Pages:
-  - login
-  - dashboard
-  - nodes
-  - rules
-  - diagnostics
-  - node token onboarding
-  - security / TOTP
-  - audit events
-- Rules page shows:
-  - responsive rule cards
-  - protocol
-  - listen port
-  - target
-  - node
-  - owner user
-  - counter total
-  - apply state/message
-  - edit
-  - enable/disable
-  - delete
-  - rule detail drawer with apply report, probes, counters, recommended actions, and ruleset fragment
-- Users page shows:
-  - users
-  - roles
-  - disabled state
-  - TOTP state
-  - password reset
-- Security page shows:
-  - local TOTP QR code
-  - manual secret fallback
-  - otpauth URI fallback
-- Nodes page shows:
-  - resource usage
-  - conntrack pressure
-  - forwarding/firewall mode
-  - node rename/delete actions for admins
-  - strict firewall explanation and Agent-side configuration notes
-  - node detail drawer with metrics, TCP retransmission ratio, last errors, private IPs, assigned rules, and ruleset preview
-- Diagnostics page shows:
-  - global findings
-  - node health cards
-  - expandable nftables ruleset
-  - rule diagnostics table
-  - target probe results
-  - counter rates
-  - node trend deltas
-  - likely cause summaries
-- Audit events page shows:
-  - Simplified Chinese action/detail labels
-  - category filters for auth, users, nodes, rules, system, and other events
+- `frontend/` 中的 React + Vite + TypeScript 单页应用。
+- 生产构建输出到 `web/`，由 Panel 直接以同源静态资源方式提供。
+- 不使用 CDN 或任何外部运行时资源。
+- `web/` 的构建产物会提交到仓库，因此正式部署不需要 Node.js。
+- 面向新手的简体中文 UI。
+- 针对首次使用、规则创建、诊断、节点接入、用户和 TOTP 的辅助卡片。
+- 节点状态、规则启用 / 应用状态、防火墙模式、探测结果、用户角色都使用中文状态标签。
+- 规则创建和节点接入都提供字段级帮助说明。
+- 视觉上使用蓝 / 靛蓝风格，支持响应式布局、本地字体栈、状态颜色、渐变和过渡动画，不依赖外部资源。
+- 节点和规则的管理操作通过表格 / 卡片动作和抽屉完成。
+- 节点设置弹窗支持 Panel 控制的严格防火墙，以及 SSH 端口和回滚秒数。
+- 危险操作使用本地 CSS 确认弹窗，不再用浏览器原生 confirm。
+- 大尺寸弹窗顶部对齐，并带内部滚动，长表单也能完整操作。
+- 总览流量面板显示：
+  - RelayCore counter 总字节数
+  - 总包数 / 连接数
+  - TCP / UDP 拆分
+  - 最高流量规则
+- 页面包括：
+  - 登录
+  - 总览
+  - 节点
+  - 规则
+  - 诊断
+  - 节点接入
+  - 安全 / TOTP
+  - 审计事件
+- 规则页展示：
+  - 响应式规则卡片
+  - 协议
+  - 监听端口
+  - 目标
+  - 节点
+  - 所属用户
+  - counter 总量
+  - 应用状态 / 信息
+  - 编辑
+  - 启用 / 禁用
+  - 删除
+  - 规则详情抽屉，包含应用报告、探测、counter、建议操作和 ruleset 片段
+- 用户页展示：
+  - 用户
+  - 角色
+  - 禁用状态
+  - TOTP 状态
+  - 重置密码
+- 安全页展示：
+  - 本地 TOTP QR 码
+  - 手动 secret 兜底
+  - otpauth URI 兜底
+- 节点页展示：
+  - 资源使用
+  - conntrack 压力
+  - 转发 / 防火墙模式
+  - 管理员可执行节点改名 / 删除
+  - 严格防火墙说明和节点侧配置提示
+  - 节点详情抽屉，包含指标、TCP 重传比、最近错误、私网 IP、分配规则和 ruleset 预览
+- 诊断页展示：
+  - 全局发现项
+  - 节点健康卡片
+  - 可展开的 nftables ruleset
+  - 规则诊断表
+  - 目标探测结果
+  - counter 速率
+  - 节点趋势变化
+  - 可能原因摘要
+- 审计事件页展示：
+  - 简体中文操作 / 详情标签
+  - auth、users、nodes、rules、system、other 分类过滤
 
-### Deployment
+### 部署
 
-- Hardened systemd templates for Panel and Agent.
-- Panel install script:
-  - creates `relaycore` system user
-  - installs binary and local web assets
-  - creates `/etc/relaycore/panel.env`
-  - stores data under `/var/lib/relaycore`
-  - runs Panel as non-root
-  - restarts the service after install/upgrade so the new binary is active
-- Agent install script:
-  - installs binary
-  - creates `/etc/relaycore-agent/agent.env`
-  - supports Panel URL/token/dry-run/strict firewall settings through env
-  - constrains systemd capabilities to network administration needs
-  - restarts the service after install/upgrade so the new binary is active
-- Release build script:
+- Panel 和 Agent 都有加固过的 systemd 模板。
+- Panel 安装脚本：
+  - 创建 `relaycore` 系统用户
+  - 安装二进制和本地 web 资源
+  - 创建 `/etc/relaycore/panel.env`
+  - 将数据存放在 `/var/lib/relaycore`
+  - 以非 root 用户运行 Panel
+  - 安装 / 升级后自动重启服务，让新二进制立即生效
+- Agent 安装脚本：
+  - 安装二进制
+  - 创建 `/etc/relaycore-agent/agent.env`
+  - 通过环境变量支持 Panel 地址、token、dry-run 和严格防火墙设置
+  - 通过 systemd capability 限制只保留网络管理所需权限
+  - 安装 / 升级后自动重启服务，让新二进制立即生效
+- Release 构建脚本：
   - `scripts/build-release.sh`
   - `make release VERSION=...`
-  - packages binaries, web assets, deploy files, scripts, and docs
-- One-click GitHub installer:
+  - 会打包二进制、本地 web 资源、部署文件、脚本和文档
+- GitHub 一键安装脚本：
   - `scripts/install.sh install-panel`
   - `scripts/install.sh install-agent`
-  - installs dependencies
-  - downloads GitHub Release assets
-  - writes env files
-  - enables and restarts systemd services
-- GitHub Actions release workflow builds and uploads linux/amd64 release archives on version tags.
-- Deployment guide includes:
-  - Panel install
-  - Agent install
-  - Nginx/Caddy reverse proxy examples
-  - strict firewall notes
-  - rescue command
-  - backup/restore
+  - 自动安装依赖
+  - 自动下载 GitHub Release 资源
+  - 自动写入 env 文件
+  - 自动启用并重启 systemd 服务
+- GitHub Actions release workflow 会在版本 tag 上构建并上传 linux/amd64 release 包。
+- 部署指南包含：
+  - Panel 安装
+  - Agent 安装
+  - Nginx / Caddy 反向代理示例
+  - 严格防火墙说明
+  - 救援命令
+  - 备份 / 恢复
 
-## Verified
+## 已验证
 
-Commands that passed:
+通过的命令：
 
 ```bash
 cd frontend && npm run build
@@ -272,7 +272,7 @@ make all
 make release
 ```
 
-Additional checks:
+其他检查：
 
 - nftables empty set/map syntax verified with `nft -c`.
 - nftables named counter map syntax verified with `nft -c`.

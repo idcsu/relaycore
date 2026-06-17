@@ -1,151 +1,160 @@
 # RelayCore
 
-RelayCore is a lightweight multi-node port forwarding panel for small Linux VPS nodes.
+RelayCore 是一个面向小型 Linux VPS 节点的轻量级多节点端口转发面板。
 
-The design goal is simple: the Agent should not copy traffic in user space. Forwarding is handled by Linux nftables/kernel NAT, while the Panel handles management, security, persistence, diagnostics, and UI.
+设计目标很直接：Agent 不在用户态搬运流量，转发尽量交给 Linux 内核和 nftables；Panel 负责管理、权限、安全、持久化、诊断和界面。
 
-## Status
+## 当前状态
 
-RelayCore is currently an internal test release.
+RelayCore 目前已经进入可部署测试阶段。
 
-Verified on a disposable Ubuntu 24.04 VPS:
+已在一次性 Ubuntu 24.04 VPS 上验证：
 
-- Panel and Agent deployed with systemd.
-- Real non-dry-run nftables TCP/UDP forwarding.
-- Public TCP and UDP forwarding to local backends.
-- Public TCP and UDP forwarding to external targets.
-- Per-rule nftables counters synced back to the Panel.
-- Diagnostics reported node health and rule traffic.
-- `relaycore-agent rescue` cleaned RelayCore-managed nftables state.
-- Strict firewall mode and rollback path verified.
-- Docker/1Panel-style `FORWARD policy DROP` compatibility verified.
+- Panel 和 Agent 通过 systemd 部署。
+- 真实非 dry-run 的 nftables TCP/UDP 转发。
+- 公网 TCP 和 UDP 到本地后端转发。
+- 公网 TCP 和 UDP 到外部目标转发。
+- 每条规则的 nftables counter 能回传到 Panel。
+- 诊断中心能汇总节点健康与规则流量。
+- `relaycore-agent rescue` 可清理 RelayCore 管理的 nftables 状态。
+- 严格防火墙模式和回滚链路已验证。
+- Docker / 1Panel 风格的 `FORWARD policy DROP` 兼容性已验证。
 
-Verified on a disposable Debian 12 VPS:
+已在一次性 Debian 12 VPS 上验证：
 
-- Panel and Agent deployed with systemd after installing `libsqlite3-0`.
-- nftables 1.0.6 compatibility verified with numeric NAT priorities.
-- Public TCP forwarding to local and external targets verified.
-- Local UDP forwarding verified from the node.
-- `relaycore-agent rescue` verified.
-- Strict firewall mode verified.
-- Public UDP packets did not reach nftables on that VPS, so public UDP ingress was treated as a provider/network limitation for that test node.
+- Panel 和 Agent 通过 systemd 部署，补装 `libsqlite3-0` 后可运行。
+- nftables 1.0.6 兼容数值化 NAT priority。
+- 公网 TCP 转发到本地和外部目标均可用。
+- 本地 UDP 转发可用。
+- `relaycore-agent rescue` 可用。
+- 严格防火墙模式已验证。
+- 该测试机上的公网 UDP 入站受到了云厂商/网络侧限制，因此这一台机器上的公网 UDP 直接入站不作为项目问题。
 
-## Does It Need Docker?
+## 是否需要 Docker
 
-No.
+不需要。
 
-RelayCore does not require Docker for either the Panel or the Agent.
+RelayCore 的 Panel 和 Agent 都不依赖 Docker。
 
-- Panel runs as a normal systemd service and stores data in SQLite.
-- Agent runs as a systemd service on each node and manages nftables.
-- Docker can exist on the same node. RelayCore includes compatibility for Docker/1Panel environments that set the system `FORWARD` chain to `DROP`.
+- Panel 作为普通 systemd 服务运行，数据存储在 SQLite。
+- Agent 作为节点上的 systemd 服务运行，并直接管理 nftables。
+- 节点上可以同时存在 Docker。RelayCore 已兼容 Docker / 1Panel 把系统 `FORWARD` 链默认设为 `DROP` 的环境。
 
-## Components
+## 组件
 
-- `relaycore-panel`: Web UI and API server.
-- `relaycore-agent`: Node-side nftables manager and metrics reporter.
-- `frontend/`: React + Vite + TypeScript frontend source.
-- `web/`: Built static frontend assets served by the Panel. No CDN.
-- `scripts/`: Install and release scripts.
-- `deploy/`: systemd service templates.
-- `docs/`: Architecture, deployment, nftables, and progress notes.
+- `relaycore-panel`：Web UI 和 API 服务。
+- `relaycore-agent`：节点侧 nftables 管理和指标上报程序。
+- `frontend/`：React + Vite + TypeScript 前端源码。
+- `web/`：Panel 直接提供的本地静态前端资源，不走 CDN。
+- `scripts/`：安装脚本和 release 脚本。
+- `deploy/`：systemd 服务模板。
+- `docs/`：架构、部署、nftables 和进度文档。
 
-## Features
+## 功能
 
-- Local static web UI, no external CDN.
-- SQLite-backed Panel storage.
-- Login sessions with secure cookies.
-- PBKDF2-SHA256 password hashing.
-- TOTP two-factor authentication.
-- User management and role checks.
-- One-time Agent registration tokens.
-- HMAC-signed Agent heartbeat with timestamp and nonce replay protection.
-- IPv4 TCP/UDP port forwarding through nftables.
-- nftables set/map based ruleset generation.
-- Per-rule named counters.
-- Rule-level apply reports.
-- Target probes and diagnostics.
-- Node metrics from `/proc`.
-- Docker/1Panel `FORWARD` chain compatibility through RelayCore `ct mark`.
-- Optional strict firewall mode with rollback.
-- Rescue command for emergency cleanup.
+- 本地静态 Web UI，不依赖外部 CDN。
+- SQLite 后端存储。
+- 安全会话登录。
+- PBKDF2-SHA256 密码哈希。
+- TOTP 双因素认证。
+- 用户管理和角色校验。
+- Agent 一次性接入 token。
+- Agent 心跳使用 HMAC 签名，带时间戳和 nonce 防重放。
+- IPv4 TCP/UDP 端口转发。
+- nftables set / map 规则生成。
+- 每条规则的 named counter。
+- 规则级应用报告。
+- 目标探测和诊断。
+- 从 `/proc` 采集节点指标。
+- 对 Docker / 1Panel `FORWARD policy DROP` 的兼容处理。
+- 可选严格防火墙模式，带回滚机制。
+- 救援命令。
 
-## Requirements
+## 系统要求
 
-Panel:
+Panel：
 
-- Linux + systemd.
-- `libsqlite3`.
-- Reverse proxy with HTTPS recommended for production.
+- Linux + systemd。
+- 需要 `libsqlite3`。
+- 生产环境建议放在 HTTPS 反向代理后面。
 
-Agent:
+Agent：
 
-- Linux + systemd.
-- nftables.
-- root or equivalent nftables permissions.
-- `net.ipv4.ip_forward=1` for cross-host forwarding.
+- Linux + systemd。
+- 需要 nftables。
+- 需要 root 或等效的 nftables 权限。
+- 跨主机转发需要 `net.ipv4.ip_forward=1`。
 
-Minimal Debian/Ubuntu images may need:
+Debian / Ubuntu 极简镜像常见依赖：
 
 ```bash
 apt-get update
 apt-get install -y libsqlite3-0 nftables
 ```
 
-## Build
+## 构建
+
+构建全部内容：
 
 ```bash
 make all
 ```
 
-Build a release archive:
+构建 release 包：
 
 ```bash
 make release VERSION=0.1.0
 ```
 
-Artifacts are written to `dist/`.
+产物会输出到 `dist/`。
 
-## Frontend
+## 前端
 
-The Panel UI is a React + Vite + TypeScript single-page app. Source lives in
-`frontend/`; the production build is emitted into `web/`, which the Panel serves
-as plain static files. No runtime CDN is used; all assets are same-origin.
+Panel 前端是 React + Vite + TypeScript 单页应用，源码在 `frontend/`，生产构建结果输出到 `web/` 并由 Panel 直接托管。
 
-The built assets in `web/` are committed so deployments do not require Node.js.
-Rebuild them whenever the frontend source changes:
+前端不使用运行时 CDN，全部资源都是同源本地文件。
+
+`web/` 下的构建产物会一并提交到仓库，所以正式部署不需要 Node.js。每次修改前端源码后，请重新构建：
 
 ```bash
 make web
-# or:
-cd frontend && npm install && npm run build
 ```
 
-For local development with hot reload, run the Panel first, then the Vite dev
-server, which proxies API requests to the Panel:
+或者：
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+本地开发可直接运行 Vite：
 
 ```bash
 cd frontend
 npm install
 npm run dev
-# override the API target if the Panel listens elsewhere:
+```
+
+如果 Panel 监听在别的地址，可覆盖代理目标：
+
+```bash
 VITE_PROXY_TARGET=http://127.0.0.1:10028 npm run dev
 ```
 
-Requirements: Node.js 20+ and npm.
+需要 Node.js 20+ 和 npm。
 
-## Install Panel
+## 一键安装 Panel
 
-One-click install from GitHub Release:
+从 GitHub Release 一键安装：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/idcsu/relaycore/main/scripts/install.sh | sudo bash -s -- install-panel --addr 0.0.0.0:10028
 ```
 
-This installs dependencies, downloads the latest GitHub Release, writes
-`/etc/relaycore/panel.env`, installs the systemd service, and starts the Panel.
+该脚本会自动安装依赖、下载最新 GitHub Release、写入 `/etc/relaycore/panel.env`、启用 systemd 并启动 Panel。
 
-Manual install from a downloaded release archive:
+也可以手动解压 release 包后安装：
 
 ```bash
 tar -xzf relaycore-0.1.0-linux-amd64.tar.gz
@@ -153,29 +162,27 @@ cd relaycore-0.1.0-linux-amd64
 sudo ./scripts/install-panel.sh
 ```
 
-Panel listens on `127.0.0.1:10028` by default.
+Panel 默认监听 `127.0.0.1:10028`。
 
-If no `ADMIN_PASSWORD` is configured, the initial admin password is printed to journal:
+如果没有设置 `ADMIN_PASSWORD`，初始管理员密码会写入 journal：
 
 ```bash
 journalctl -u relaycore-panel -n 80 --no-pager
 ```
 
-Put the Panel behind HTTPS with Nginx or Caddy before production use.
+生产环境请把 Panel 放到 Nginx 或 Caddy 后面，并启用 HTTPS。
 
-## Install Agent
+## 一键安装 Agent
 
-Create a node token in the Panel, then run on the node:
+先在 Panel 中创建节点 token，然后在节点上执行：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/idcsu/relaycore/main/scripts/install.sh | sudo bash -s -- install-agent --panel https://relaycore.example.com --token your-node-token
 ```
 
-This installs dependencies, downloads the latest GitHub Release, writes
-`/etc/relaycore-agent/agent.env`, installs the systemd service, and starts the
-Agent.
+该脚本会自动安装依赖、下载最新 GitHub Release、写入 `/etc/relaycore-agent/agent.env`、启用 systemd 并启动 Agent。
 
-Manual install from a downloaded release archive:
+也可以手动从 release 包安装：
 
 ```bash
 tar -xzf relaycore-0.1.0-linux-amd64.tar.gz
@@ -183,17 +190,17 @@ cd relaycore-0.1.0-linux-amd64
 sudo PANEL_URL=https://relaycore.example.com TOKEN=your-node-token ./scripts/install-agent.sh
 ```
 
-The Agent stores its config at:
+Agent 的配置会保存在：
 
 ```bash
 /etc/relaycore-agent/agent.json
 ```
 
-The one-time token is cleared after successful registration.
+一次性 token 在注册成功后会被清空。
 
-## Strict Firewall Mode
+## 严格防火墙模式
 
-Strict mode is optional.
+严格模式是可选项。
 
 ```bash
 RELAYCORE_FIREWALL_MODE=strict
@@ -201,29 +208,29 @@ RELAYCORE_SSH_PORTS=22
 RELAYCORE_FIREWALL_ROLLBACK_SECONDS=60
 ```
 
-Strict mode creates `table inet relaycore_guard`, keeps SSH open, allows current forwarding ports, allows RelayCore-marked DNAT connections, and rolls back if the Panel cannot confirm the Agent is still reachable.
+严格模式会创建 `table inet relaycore_guard`，保留 SSH，允许当前转发端口，并在 Panel 无法确认节点仍可达时自动回滚。
 
-## Rescue
+## 救援
 
-If a node becomes misconfigured:
+如果节点配置异常：
 
 ```bash
 sudo relaycore-agent rescue
 ```
 
-This removes RelayCore-managed nftables tables and its RelayCore `ct mark` compatibility rule. It does not clean unrelated system firewall rules.
+这个命令会移除 RelayCore 管理的 nftables 表和兼容规则，不会清理系统里其他防火墙规则。
 
-## Documentation
+## 文档
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [Deployment](docs/DEPLOYMENT.md)
-- [nftables strategy](docs/NFTABLES.md)
-- [Progress notes](docs/PROGRESS.md)
+- [架构说明](docs/ARCHITECTURE.md)
+- [部署指南](docs/DEPLOYMENT.md)
+- [nftables 策略](docs/NFTABLES.md)
+- [进度记录](docs/PROGRESS.md)
 
-## Current Caveats
+## 已知限制
 
-- IPv4 forwarding only.
-- SQLite storage is currently snapshot-style, not a normalized relational schema.
-- UDP probes can only verify basic send-path behavior.
-- More firewall combinations still need smoke testing.
-- flowtable acceleration is not enabled yet.
+- 目前仅支持 IPv4 转发。
+- SQLite 存储还是快照式，不是完整的关系型归一化设计。
+- UDP 探测只能验证发送路径，不是完整的应用层响应验证。
+- 还需要补更多防火墙组合的冒烟测试。
+- flowtable 加速还没有启用。

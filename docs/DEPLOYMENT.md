@@ -4,11 +4,11 @@
 
 - Linux + systemd。
 - Panel 需要 `libsqlite3`。
-- Agent 需要 `nftables`，并且必须有管理 nftables 的权限。
-- 跨主机转发需要 `net.ipv4.ip_forward=1`。
-- 建议先在一次性 VPS 上测试非 dry-run nftables apply，再迁移生产节点。
+- Agent 需要 `nftables`，并且要有管理 nftables 的权限。
+- 跨主机转发需要打开 `net.ipv4.ip_forward=1`。
+- 建议先在一次性 VPS 上验证非 dry-run 的 nftables apply，再迁移到生产节点。
 
-Debian/Ubuntu 极简镜像可先安装：
+Debian / Ubuntu 极简镜像可先安装：
 
 ```bash
 apt-get update
@@ -30,11 +30,11 @@ relaycore-0.1.0-linux-amd64.tar.gz
 relaycore-0.1.0-linux-amd64.tar.gz.sha256
 ```
 
-Panel 使用 CGO 链接系统 `libsqlite3`，跨平台构建时需要对应平台的 C 工具链。生产上最稳妥的方式是在目标架构机器上构建。
+Panel 使用 CGO 链接系统 `libsqlite3`，跨平台构建时需要对应平台的 C 工具链。生产环境最稳妥的方式仍然是在目标架构机器上构建。
 
 ## Panel 安装
 
-推荐使用 GitHub Release 一键安装：
+推荐直接使用 GitHub Release 一键安装：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/idcsu/relaycore/main/scripts/install.sh | sudo bash -s -- install-panel --addr 0.0.0.0:10028
@@ -42,7 +42,7 @@ curl -fsSL https://raw.githubusercontent.com/idcsu/relaycore/main/scripts/instal
 
 脚本会自动安装依赖、下载最新 release、写入 `/etc/relaycore/panel.env`、启用 systemd 并启动服务。
 
-解压 release 包后执行：
+如果你已经解压了 release 包，也可以手动安装：
 
 ```bash
 sudo ./scripts/install-panel.sh
@@ -94,7 +94,7 @@ sudo systemctl restart relaycore-panel
 
 ## 反向代理
 
-生产环境必须把 Panel 放在 HTTPS 后面。Panel 会在 HTTPS 或 `X-Forwarded-Proto: https` 下设置 Secure Cookie。
+生产环境建议把 Panel 放在 HTTPS 后面。Panel 会在 HTTPS 或 `X-Forwarded-Proto: https` 下设置 Secure Cookie。
 
 ### Nginx
 
@@ -127,7 +127,7 @@ relaycore.example.com {
 
 ## Agent 安装
 
-推荐在面板“节点接入”里生成命令，或者手动执行：
+建议先在 Panel 的“节点接入”里生成命令，或者直接执行：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/idcsu/relaycore/main/scripts/install.sh | sudo bash -s -- install-agent --panel https://relaycore.example.com --token 面板生成的token
@@ -135,7 +135,7 @@ curl -fsSL https://raw.githubusercontent.com/idcsu/relaycore/main/scripts/instal
 
 脚本会自动安装依赖、下载最新 release、写入 `/etc/relaycore-agent/agent.env`、启用 systemd 并启动服务。
 
-在节点服务器上解压 release 包后执行：
+如果你已经解压了 release 包，也可以手动安装：
 
 ```bash
 sudo PANEL_URL=https://relaycore.example.com TOKEN=面板生成的token ./scripts/install-agent.sh
@@ -166,19 +166,19 @@ RELAYCORE_SSH_PORTS=22
 RELAYCORE_FIREWALL_ROLLBACK_SECONDS=60
 ```
 
-注册成功后 Agent 会把 node secret 保存到 `agent.json`，并清空一次性 token。
+注册成功后，Agent 会把 node secret 保存到 `agent.json`，并清空一次性 token。
 
 ## 转发链兼容
 
-RelayCore 的 NAT 数据面在 `table ip relaycore` 中管理。对于 Docker、1Panel 等把系统 `FORWARD` 链默认策略改成 `DROP` 的节点，Agent 会给命中 RelayCore 监听端口的连接设置固定 `ct mark`，并尝试在现有 `ip filter FORWARD` 链顶部放行该 mark。
+RelayCore 的 NAT 数据面由 `table ip relaycore` 管理。对于 Docker、1Panel 等把系统 `FORWARD` 链默认策略改成 `DROP` 的节点，Agent 会给命中 RelayCore 监听端口的连接设置固定 `ct mark`，并尝试在现有 `ip filter FORWARD` 链顶部放行该 mark。
 
-这个兼容规则只放行 RelayCore 管理的连接，不会把整条 `FORWARD` 链改成 accept。若节点使用自定义 nftables base chain 在其他位置 drop 转发流量，需要管理员额外接入该防火墙策略。
+这个兼容规则只放行 RelayCore 管理的连接，不会把整条 `FORWARD` 链改成 accept。若节点使用自定义 nftables base chain，并在其他位置 drop 转发流量，仍需要管理员额外接入该防火墙策略。
 
 ## 严格防火墙模式
 
 默认 `RELAYCORE_FIREWALL_MODE=managed` 只管理 NAT 转发表。
 
-启用 strict 前，确认 SSH 端口正确：
+启用 strict 前，先确认 SSH 端口配置正确：
 
 ```bash
 RELAYCORE_FIREWALL_MODE=strict
@@ -186,11 +186,11 @@ RELAYCORE_SSH_PORTS=22,2222
 RELAYCORE_FIREWALL_ROLLBACK_SECONDS=60
 ```
 
-strict 模式会应用 `table inet relaycore_guard`，并在 Panel 确认节点仍可达前保持回滚计时器。guard input 链会放行 RelayCore `ct mark`，因此 DNAT 到本机后端时不需要额外开放后端端口。建议先在 disposable VPS 上验证。
+strict 模式会应用 `table inet relaycore_guard`，并在 Panel 确认节点仍可达前保持回滚计时器。guard input 链会放行 RelayCore `ct mark`，因此 DNAT 到本机后端时不需要额外开放后端端口。建议先在一次性 VPS 上验证。
 
 ## 救援
 
-如果规则误配或 strict 模式导致异常，在节点上执行：
+如果规则误配或 strict 模式导致异常，可以在节点上执行：
 
 ```bash
 sudo relaycore-agent rescue
