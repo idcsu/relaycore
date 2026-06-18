@@ -35,7 +35,11 @@ mkdir -p "$(dirname "$BIN")" "$DATA_DIR"
 install -m 0755 ./relaycore-agent "$BIN"
 chmod 0700 "$DATA_DIR"
 
-if [ ! -f "$ENV_FILE" ]; then
+if [ -n "${TOKEN:-}" ] && [ -f "${DATA_DIR}/agent.json" ]; then
+  mv "${DATA_DIR}/agent.json" "${DATA_DIR}/agent.json.bak.$(date +%Y%m%d-%H%M%S)"
+fi
+
+if [ ! -f "$ENV_FILE" ] || { [ -n "${PANEL_URL:-}" ] && [ -n "${TOKEN:-}" ]; }; then
   cat >"$ENV_FILE" <<ENV_EOF
 RELAYCORE_AGENT_DATA=${DATA_DIR}
 # 首次接入可填入面板生成的一次性 token，注册成功后 Agent 会保存 node_secret 并清空 token。

@@ -193,6 +193,16 @@ write_agent_env(){
   chmod 0600 "$AGENT_ENV_FILE"
 }
 
+backup_agent_config_for_registration(){
+  local token="$1"
+  local config_file="${AGENT_DATA_DIR}/agent.json"
+  if [ -n "$token" ] && [ -f "$config_file" ]; then
+    local backup_file="${config_file}.bak.$(date +%Y%m%d-%H%M%S)"
+    mv "$config_file" "$backup_file"
+    yellow "检测到新的节点 Token，旧 Agent 配置已备份：${backup_file}"
+  fi
+}
+
 # ---------- Panel systemd 服务 ----------
 write_panel_service(){
   cat >"/etc/systemd/system/${PANEL_SERVICE}" <<SERVICE_EOF
@@ -608,6 +618,7 @@ install_agent(){
   mkdir -p "$(dirname "$AGENT_BIN")" "$AGENT_DATA_DIR"
   install -m 0755 "${TMP_DIR}/release/relaycore-agent" "$AGENT_BIN"
   chmod 0700 "$AGENT_DATA_DIR"
+  backup_agent_config_for_registration "$token"
 
   write_agent_env "$panel" "$token" "$node_name" "$dry_run" "$firewall_mode" "$ssh_ports" "$rollback_seconds"
   write_agent_service

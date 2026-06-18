@@ -120,6 +120,16 @@ func (a *Agent) heartbeatOnce() error {
 	req := a.heartbeatRequest()
 	var resp common.AgentHeartbeatResponse
 	if err := a.postJSON("/api/agent/heartbeat", req, &resp, true); err != nil {
+		if a.cfg.Token != "" && isUnknownNodeError(err) {
+			log.Printf("panel no longer recognizes node %s; trying registration with configured token", a.cfg.NodeID)
+			a.cfg.NodeID = ""
+			a.cfg.NodeSecret = ""
+			a.cfg.RuleVersion = -1
+			if regErr := a.Register(); regErr != nil {
+				return regErr
+			}
+			return a.SaveConfig()
+		}
 		return err
 	}
 	if a.applyPanelFirewallPolicy(resp.FirewallPolicy) {
@@ -154,6 +164,13 @@ func (a *Agent) heartbeatOnce() error {
 		}
 	}
 	return nil
+}
+
+func isUnknownNodeError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "unknown node")
 }
 
 func (a *Agent) applyPanelFirewallPolicy(policy common.FirewallPolicy) bool {
