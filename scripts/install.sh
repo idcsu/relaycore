@@ -61,8 +61,7 @@ need_root(){
 detect_arch(){
   case "$(uname -m)" in
     x86_64|amd64) echo "amd64" ;;
-    aarch64|arm64) echo "arm64" ;;
-    *) red "当前一键脚本暂只提供 linux/amd64 和 linux/arm64 release 包"; exit 1 ;;
+    *) red "当前 GitHub Release 暂只提供 linux/amd64 安装包"; exit 1 ;;
   esac
 }
 
@@ -433,12 +432,18 @@ reset_panel_password(){
   read_tty_secret admin_pass "请输入新密码（留空则自动生成）: "
 
   systemctl stop "$PANEL_SERVICE" 2>/dev/null || true
+  local rc=0
   if [ -n "$admin_pass" ]; then
-    "$PANEL_BIN" -data "$PANEL_DATA_DIR" -admin-user "$admin_user" -admin-password "$admin_pass" -reset-admin-password
+    "$PANEL_BIN" -data "$PANEL_DATA_DIR" -admin-user "$admin_user" -admin-password "$admin_pass" -reset-admin-password || rc=$?
   else
-    "$PANEL_BIN" -data "$PANEL_DATA_DIR" -admin-user "$admin_user" -reset-admin-password
+    "$PANEL_BIN" -data "$PANEL_DATA_DIR" -admin-user "$admin_user" -reset-admin-password || rc=$?
   fi
   systemctl start "$PANEL_SERVICE" 2>/dev/null || true
+
+  if [ "$rc" -ne 0 ]; then
+    red "管理员密码重置失败，Panel 服务已尝试重新启动"
+    return "$rc"
+  fi
 
   green "管理员密码已重置，旧登录会话已失效"
 }
@@ -675,11 +680,11 @@ usage_panel(){
   cat <<'USAGE'
 RelayCore Panel 安装参数：
   install-panel [--addr 0.0.0.0:10028] [--admin-user admin] [--admin-password PASSWORD]
-  install-panel [--version 0.1.0] [--repo idcsu/relaycore]
+  install-panel [--version 0.1.1] [--repo idcsu/relaycore]
 
 环境变量：
   RELAYCORE_REPO=idcsu/relaycore
-  RELAYCORE_VERSION=latest | 0.1.0 | v0.1.0
+  RELAYCORE_VERSION=latest | 0.1.1 | v0.1.1
 USAGE
 }
 
@@ -689,11 +694,11 @@ RelayCore Agent 安装参数：
   install-agent --panel URL --token TOKEN [--node-name NAME]
                 [--ssh-ports 22] [--firewall-mode managed|strict]
                 [--rollback-seconds 60] [--dry-run]
-  install-agent [--version 0.1.0] [--repo idcsu/relaycore]
+  install-agent [--version 0.1.1] [--repo idcsu/relaycore]
 
 环境变量：
   RELAYCORE_REPO=idcsu/relaycore
-  RELAYCORE_VERSION=latest | 0.1.0 | v0.1.0
+  RELAYCORE_VERSION=latest | 0.1.1 | v0.1.1
 USAGE
 }
 
@@ -712,7 +717,7 @@ RelayCore 一键安装 + 管理脚本
 
 环境变量：
   RELAYCORE_REPO=idcsu/relaycore
-  RELAYCORE_VERSION=latest | 0.1.0 | v0.1.0
+  RELAYCORE_VERSION=latest | 0.1.1 | v0.1.1
 USAGE
 }
 

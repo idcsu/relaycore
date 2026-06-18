@@ -20,14 +20,14 @@ apt-get install -y libsqlite3-0 nftables
 在项目根目录执行：
 
 ```bash
-make release VERSION=0.1.0
+make release VERSION=0.1.1
 ```
 
 产物会生成在 `dist/`：
 
 ```bash
-relaycore-0.1.0-linux-amd64.tar.gz
-relaycore-0.1.0-linux-amd64.tar.gz.sha256
+relaycore-0.1.1-linux-amd64.tar.gz
+relaycore-0.1.1-linux-amd64.tar.gz.sha256
 ```
 
 Panel 使用 CGO 链接系统 `libsqlite3`，跨平台构建时需要对应平台的 C 工具链。生产环境最稳妥的方式仍然是在目标架构机器上构建。

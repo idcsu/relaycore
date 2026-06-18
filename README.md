@@ -103,7 +103,7 @@ make all
 构建 release 包：
 
 ```bash
-make release VERSION=0.1.0
+make release VERSION=0.1.1
 ```
 
 产物会输出到 `dist/`。
@@ -157,8 +157,8 @@ curl -fsSL https://raw.githubusercontent.com/idcsu/relaycore/main/scripts/instal
 也可以手动解压 release 包后安装：
 
 ```bash
-tar -xzf relaycore-0.1.0-linux-amd64.tar.gz
-cd relaycore-0.1.0-linux-amd64
+tar -xzf relaycore-0.1.1-linux-amd64.tar.gz
+cd relaycore-0.1.1-linux-amd64
 sudo ./scripts/install-panel.sh
 ```
 
@@ -214,8 +214,8 @@ curl -fsSL https://raw.githubusercontent.com/idcsu/relaycore/main/scripts/instal
 也可以手动从 release 包安装：
 
 ```bash
-tar -xzf relaycore-0.1.0-linux-amd64.tar.gz
-cd relaycore-0.1.0-linux-amd64
+tar -xzf relaycore-0.1.1-linux-amd64.tar.gz
+cd relaycore-0.1.1-linux-amd64
 sudo PANEL_URL=https://relaycore.example.com TOKEN=your-node-token ./scripts/install-agent.sh
 ```
 

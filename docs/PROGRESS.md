@@ -415,7 +415,7 @@ Last rule-loop validation result:
    - 新增备份/恢复：打包数据+配置到 /root/relaycore-backup/，恢复支持 .tar.gz 和 .db 格式。
    - 新增重置密码：停止 Panel → 调用 -reset-admin-password → 重启。
    - 新增修改监听地址：交互输入新地址 → 更新 env 文件 → 重启。
-   - 支持 arm64 架构检测。
+   - 当前 GitHub Release 安装包限定 linux/amd64，避免在未发布 arm64 包时误导用户。
    - 保留原有的非交互模式：install-panel / install-agent 直接传参安装。
    - 新增快捷命令：update-panel、update-agent、uninstall-panel、uninstall-agent、status、logs、restart、backup、restore、reset-password、configure-listen、rescue。
 
