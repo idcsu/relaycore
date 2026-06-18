@@ -100,6 +100,24 @@ install_deps_agent(){
   fi
 }
 
+enable_ipv4_forwarding(){
+  mkdir -p /etc/sysctl.d
+  if [ -f /etc/sysctl.d/99-relaycore.conf ]; then
+    if grep -q '^net.ipv4.ip_forward=' /etc/sysctl.d/99-relaycore.conf; then
+      sed -i 's/^net.ipv4.ip_forward=.*/net.ipv4.ip_forward=1/' /etc/sysctl.d/99-relaycore.conf
+    else
+      printf '\nnet.ipv4.ip_forward=1\n' >>/etc/sysctl.d/99-relaycore.conf
+    fi
+  else
+    printf 'net.ipv4.ip_forward=1\n' >/etc/sysctl.d/99-relaycore.conf
+  fi
+  if sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1; then
+    green "已开启 IPv4 转发：net.ipv4.ip_forward=1"
+  else
+    yellow "IPv4 转发开启失败，请手动检查：sysctl net.ipv4.ip_forward"
+  fi
+}
+
 # ---------- 下载 release ----------
 release_base_url(){
   if [ "$VERSION" = "latest" ]; then
@@ -583,6 +601,7 @@ install_agent(){
   fi
 
   install_deps_agent
+  enable_ipv4_forwarding
   download_release
 
   # 安装二进制
@@ -608,6 +627,7 @@ install_agent(){
 update_agent(){
   need_root
   install_deps_agent
+  enable_ipv4_forwarding
 
   yellow "正在下载新版本..."
   download_release

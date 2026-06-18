@@ -14,6 +14,18 @@ if [ "$(id -u)" != "0" ]; then
   exit 1
 fi
 
+mkdir -p /etc/sysctl.d
+if [ -f /etc/sysctl.d/99-relaycore.conf ]; then
+  if grep -q '^net.ipv4.ip_forward=' /etc/sysctl.d/99-relaycore.conf; then
+    sed -i 's/^net.ipv4.ip_forward=.*/net.ipv4.ip_forward=1/' /etc/sysctl.d/99-relaycore.conf
+  else
+    printf '\nnet.ipv4.ip_forward=1\n' >>/etc/sysctl.d/99-relaycore.conf
+  fi
+else
+  printf 'net.ipv4.ip_forward=1\n' >/etc/sysctl.d/99-relaycore.conf
+fi
+sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || echo "警告：IPv4 转发开启失败，请手动检查 sysctl net.ipv4.ip_forward"
+
 if [ ! -x "./relaycore-agent" ]; then
   echo "请先在项目目录执行：make agent"
   exit 1

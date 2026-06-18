@@ -5,7 +5,7 @@
 - Linux + systemd。
 - Panel 需要 `libsqlite3`。
 - Agent 需要 `nftables`，并且要有管理 nftables 的权限。
-- 跨主机转发需要打开 `net.ipv4.ip_forward=1`。
+- 跨主机转发需要打开 `net.ipv4.ip_forward=1`，Agent 安装脚本会自动开启。
 - 建议先在一次性 VPS 上验证非 dry-run 的 nftables apply，再迁移到生产节点。
 
 Debian / Ubuntu 极简镜像可先安装：
@@ -133,7 +133,7 @@ relaycore.example.com {
 curl -fsSL https://raw.githubusercontent.com/idcsu/relaycore/main/scripts/install.sh | sudo bash -s -- install-agent --panel https://relaycore.example.com --token 面板生成的token
 ```
 
-脚本会自动安装依赖、下载最新 release、写入 `/etc/relaycore-agent/agent.env`、启用 systemd 并启动服务。
+脚本会自动安装依赖、开启 IPv4 转发、下载最新 release、写入 `/etc/relaycore-agent/agent.env`、启用 systemd 并启动服务。
 
 如果你已经解压了 release 包，也可以手动安装：
 

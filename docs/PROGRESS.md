@@ -234,6 +234,7 @@ Panel 诊断目前包含：
 - Agent 安装脚本：
   - 安装二进制
   - 创建 `/etc/relaycore-agent/agent.env`
+  - 自动开启 `net.ipv4.ip_forward=1`
   - 通过环境变量支持 Panel 地址、token、dry-run 和严格防火墙设置
   - 通过 systemd capability 限制只保留网络管理所需权限
   - 安装 / 升级后自动重启服务，让新二进制立即生效

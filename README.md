@@ -83,7 +83,7 @@ Agent：
 - Linux + systemd。
 - 需要 nftables。
 - 需要 root 或等效的 nftables 权限。
-- 跨主机转发需要 `net.ipv4.ip_forward=1`。
+- 跨主机转发需要 `net.ipv4.ip_forward=1`，Agent 安装脚本会自动开启。
 
 Debian / Ubuntu 极简镜像常见依赖：
 
@@ -209,7 +209,7 @@ relaycore-manage menu
 curl -fsSL https://raw.githubusercontent.com/idcsu/relaycore/main/scripts/install.sh | sudo bash -s -- install-agent --panel https://relaycore.example.com --token your-node-token
 ```
 
-该脚本会自动安装依赖、下载最新 GitHub Release、写入 `/etc/relaycore-agent/agent.env`、启用 systemd 并启动 Agent。
+该脚本会自动安装依赖、开启 IPv4 转发、下载最新 GitHub Release、写入 `/etc/relaycore-agent/agent.env`、启用 systemd 并启动 Agent。
 
 也可以手动从 release 包安装：
 
