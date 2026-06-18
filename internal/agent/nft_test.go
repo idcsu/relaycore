@@ -12,6 +12,12 @@ import (
 
 func TestRenderNFTablesOmitsEmptyElements(t *testing.T) {
 	got := RenderNFTables(nil)
+	if !strings.HasPrefix(got, "delete table ip relaycore\ntable ip relaycore") {
+		t.Fatalf("ruleset should rebuild the relaycore table:\n%s", got)
+	}
+	if strings.Contains(got, "flush table ip relaycore") {
+		t.Fatalf("ruleset should not flush and reuse old map elements:\n%s", got)
+	}
 	if strings.Contains(got, "elements = {  }") {
 		t.Fatalf("empty elements should be omitted:\n%s", got)
 	}
@@ -94,7 +100,7 @@ func TestRenderFirewallGuardPreservesSSHAndPublicPorts(t *testing.T) {
 		TargetIP: "127.0.0.1",
 	}}, []int{2222, 22, 22})
 	for _, want := range []string{
-		"flush table inet relaycore_guard",
+		"delete table inet relaycore_guard",
 		"type filter hook input priority filter; policy drop;",
 		"tcp dport { 22, 2222 } accept",
 		"ct mark 0x00052435 accept",

@@ -358,7 +358,7 @@ func RenderNFTables(rules []resolvedRule) string {
 	}
 
 	var b strings.Builder
-	b.WriteString("flush table ip " + nftTable + "\n")
+	b.WriteString("delete table ip " + nftTable + "\n")
 	b.WriteString("table ip " + nftTable + " {\n")
 	writeCounterObjects(&b, rules)
 	writePortSet(&b, "tcp_ports", tcpMap)
@@ -408,7 +408,7 @@ func RenderFirewallGuard(rules []resolvedRule, sshPorts []int) string {
 	}
 	sshPorts = normalizePorts(sshPorts)
 	var b strings.Builder
-	b.WriteString("flush table inet " + firewallTable + "\n")
+	b.WriteString("delete table inet " + firewallTable + "\n")
 	b.WriteString("table inet " + firewallTable + " {\n")
 	writeInetServiceSet(&b, "tcp_public_ports", sortedPortSet(tcpPorts))
 	writeInetServiceSet(&b, "udp_public_ports", sortedPortSet(udpPorts))

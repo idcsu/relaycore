@@ -952,6 +952,9 @@ func (s *Store) SaveRule(r common.ForwardRule, actor common.User, ip string) (co
 		r.LastApplyState = old.LastApplyState
 		r.LastError = old.LastError
 	}
+	if err := s.checkRulePortConflictLocked(r, now); err != nil {
+		return common.ForwardRule{}, err
+	}
 	r.UpdatedAt = now
 	s.data.RuleVersion++
 	r.RuleVersion = s.data.RuleVersion
@@ -1327,6 +1330,54 @@ func validateRule(r common.ForwardRule) error {
 		}
 	}
 	return nil
+}
+
+func (s *Store) checkRulePortConflictLocked(r common.ForwardRule, now time.Time) error {
+	if !r.Enabled || ruleExpired(r, now) {
+		return nil
+	}
+	for _, existing := range s.data.Rules {
+		if existing.ID == r.ID || existing.NodeID != r.NodeID || !existing.Enabled || ruleExpired(existing, now) {
+			continue
+		}
+		if existing.ListenPort != r.ListenPort || !protocolsOverlap(r.Protocol, existing.Protocol) {
+			continue
+		}
+		return fmt.Errorf("%w: 监听端口 %d 的 %s 已被规则「%s」占用，请更换端口或先停用原规则", ErrBadRequest, r.ListenPort, protocolOverlapLabel(r.Protocol, existing.Protocol), existing.Name)
+	}
+	return nil
+}
+
+func ruleExpired(r common.ForwardRule, now time.Time) bool {
+	return r.ExpireAt != nil && now.After(*r.ExpireAt)
+}
+
+func protocolsOverlap(a, b string) bool {
+	if a == "both" || b == "both" {
+		return true
+	}
+	return a == b
+}
+
+func protocolOverlapLabel(a, b string) string {
+	if a == "both" && b == "both" {
+		return "TCP/UDP"
+	}
+	if a == "both" {
+		return protocolLabel(b)
+	}
+	return protocolLabel(a)
+}
+
+func protocolLabel(protocol string) string {
+	switch protocol {
+	case "udp":
+		return "UDP"
+	case "both":
+		return "TCP/UDP"
+	default:
+		return "TCP"
+	}
 }
 
 func buildNodeTrend(samples []NodeMetricSample, now time.Time) NodeTrend {
