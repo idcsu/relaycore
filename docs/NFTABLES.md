@@ -76,7 +76,7 @@ relaycore-agent -firewall strict -ssh-ports 22,2222 -rollback-seconds 60
 - 放行 ICMP/IPv6 ICMP。
 - 放行 RelayCore `ct mark`，用于 DNAT 后仍能识别并允许本项目管理的连接。
 - 放行 `-ssh-ports` 指定的 SSH 端口，默认 `22`。
-- 放行当前转发规则的公网监听端口。
+- 仅对 IPv4 放行当前转发规则的公网监听端口；IPv6 不会因为同端口被额外放行，直到项目正式支持 IPv6 转发。
 - forward 链保持 `policy accept`，避免破坏内核 NAT 转发路径。
 
 安全流：

@@ -255,7 +255,7 @@ RELAYCORE_SSH_PORTS=22
 RELAYCORE_FIREWALL_ROLLBACK_SECONDS=60
 ```
 
-严格模式会创建 `table inet relaycore_guard`，保留 SSH，允许当前转发端口，并在 Panel 无法确认节点仍可达时自动回滚。
+严格模式会创建 `table inet relaycore_guard`，保留 SSH，允许当前 IPv4 转发端口，并在 Panel 无法确认节点仍可达时自动回滚。IPv6 不会因为同名转发端口被额外放行。
 
 ## 救援
 

@@ -100,11 +100,19 @@ func TestRenderFirewallGuardPreservesSSHAndPublicPorts(t *testing.T) {
 		"ct mark 0x00052435 accept",
 		"elements = { 10028 }",
 		"elements = { 10029 }",
-		"tcp dport @tcp_public_ports accept",
-		"udp dport @udp_public_ports accept",
+		"ip protocol tcp tcp dport @tcp_public_ports accept",
+		"ip protocol udp udp dport @udp_public_ports accept",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("guard ruleset missing %q:\n%s", want, got)
+		}
+	}
+	for _, forbidden := range []string{
+		"\n    tcp dport @tcp_public_ports accept",
+		"\n    udp dport @udp_public_ports accept",
+	} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("guard ruleset should not allow IPv6 forwarding ports with %q:\n%s", forbidden, got)
 		}
 	}
 }

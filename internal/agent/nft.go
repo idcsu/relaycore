@@ -422,10 +422,10 @@ func RenderFirewallGuard(rules []resolvedRule, sshPorts []int) string {
 	b.WriteString("    ip6 nexthdr ipv6-icmp accept\n")
 	b.WriteString("    tcp dport { " + joinPorts(sshPorts) + " } accept\n")
 	if len(tcpPorts) > 0 {
-		b.WriteString("    tcp dport @tcp_public_ports accept\n")
+		b.WriteString("    ip protocol tcp tcp dport @tcp_public_ports accept\n")
 	}
 	if len(udpPorts) > 0 {
-		b.WriteString("    udp dport @udp_public_ports accept\n")
+		b.WriteString("    ip protocol udp udp dport @udp_public_ports accept\n")
 	}
 	b.WriteString("    counter drop\n")
 	b.WriteString("  }\n")

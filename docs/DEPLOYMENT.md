@@ -186,7 +186,7 @@ RELAYCORE_SSH_PORTS=22,2222
 RELAYCORE_FIREWALL_ROLLBACK_SECONDS=60
 ```
 
-strict 模式会应用 `table inet relaycore_guard`，并在 Panel 确认节点仍可达前保持回滚计时器。guard input 链会放行 RelayCore `ct mark`，因此 DNAT 到本机后端时不需要额外开放后端端口。建议先在一次性 VPS 上验证。
+strict 模式会应用 `table inet relaycore_guard`，并在 Panel 确认节点仍可达前保持回滚计时器。guard input 链会放行 RelayCore `ct mark`，因此 DNAT 到本机后端时不需要额外开放后端端口。当前转发数据面是 IPv4 only，所以严格模式只按 IPv4 放行转发监听端口，不会在 IPv6 上额外开放同端口。建议先在一次性 VPS 上验证。
 
 ## 救援
 
