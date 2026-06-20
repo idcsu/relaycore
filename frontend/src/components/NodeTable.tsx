@@ -73,10 +73,12 @@ export function NodeTable({
                   <br />
                   {pct(m.conntrack_count, m.conntrack_max)}
                 </td>
-                <td className="cell-badges">
-                  <Badge tone="info">{n.forwarding_mode || "nftables"}</Badge>
-                  <FirewallBadge mode={n.firewall_mode} desired={n.desired_firewall_mode} />
-                  <Badge tone="ok">{m.forwarding_rule_count || 0} 条规则</Badge>
+                <td>
+                  <div className="cell-badges">
+                    <Badge tone="info">{n.forwarding_mode || "nftables"}</Badge>
+                    <FirewallBadge mode={n.firewall_mode} desired={n.desired_firewall_mode} />
+                    <Badge tone="ok">{m.forwarding_rule_count || 0} 条规则</Badge>
+                  </div>
                 </td>
                 <td className="mono">{n.public_ip || "-"}</td>
                 <td>

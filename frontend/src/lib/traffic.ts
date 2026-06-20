@@ -1,10 +1,13 @@
-import type { Counter, Node, Rule } from "../api/types";
+import type { Counter, Node, Rule, TrafficOverview, TrafficSeriesPoint } from "../api/types";
 
 export interface TrafficRuleSummary {
   rule_id: string;
   bytes: number;
   packets: number;
   rule?: Rule;
+  name?: string;
+  protocol?: string;
+  listenPort?: number;
 }
 
 export interface TrafficNodeSummary {
@@ -22,7 +25,52 @@ export interface TrafficSummary {
   byProtocol: { tcp: number; udp: number; other: number };
   byNode: TrafficNodeSummary[];
   topRules: TrafficRuleSummary[];
+  series: TrafficSeriesPoint[];
+  windowSeconds: number;
+  source: "cumulative" | "current";
   topNode?: TrafficNodeSummary;
+}
+
+export function trafficSummaryFromOverview(overview: TrafficOverview | undefined, nodes: Node[], rules: Rule[]): TrafficSummary | null {
+  if (!overview) return null;
+  const nodeByID = new Map(nodes.map((n) => [n.id, n]));
+  const ruleByID = new Map(rules.map((r) => [r.id, r]));
+  const byNode = (overview.nodes || []).map((item) => ({
+    node_id: item.node_id,
+    bytes: Number(item.bytes || 0),
+    packets: Number(item.packets || 0),
+    ruleCount: Number(item.rule_count || 0),
+    enabledRuleCount: Number(item.enabled_rule_count || 0),
+    node: nodeByID.get(item.node_id) || (item.node_name ? ({ id: item.node_id, name: item.node_name } as Node) : undefined),
+  }));
+  const topRules = (overview.rules || []).map((item) => {
+    const rule = ruleByID.get(item.rule_id);
+    return {
+      rule_id: item.rule_id,
+      bytes: Number(item.bytes || 0),
+      packets: Number(item.packets || 0),
+      rule,
+      name: item.rule_name,
+      protocol: item.protocol,
+      listenPort: item.listen_port,
+    };
+  });
+  const byProtocol = overview.by_protocol || {};
+  return {
+    bytes: Number(overview.bytes || 0),
+    packets: Number(overview.packets || 0),
+    byProtocol: {
+      tcp: Number(byProtocol.tcp || 0),
+      udp: Number(byProtocol.udp || 0),
+      other: Number(byProtocol.other || 0),
+    },
+    byNode,
+    topRules,
+    topNode: byNode[0],
+    series: overview.series || [],
+    windowSeconds: Number(overview.window_seconds || 0),
+    source: "cumulative",
+  };
 }
 
 export function trafficSummary(counters: Counter[], rules: Rule[], nodes: Node[] = []): TrafficSummary {
@@ -88,7 +136,7 @@ export function trafficSummary(counters: Counter[], rules: Rule[], nodes: Node[]
   const nodeItems = [...byNode.values()]
     .map((item) => ({ ...item, node: item.node || nodes.find((n) => n.id === item.node_id) }))
     .sort((a, b) => b.bytes - a.bytes || a.node_id.localeCompare(b.node_id));
-  return { bytes, packets, byProtocol, byNode: nodeItems, topRules, topNode: nodeItems[0] };
+  return { bytes, packets, byProtocol, byNode: nodeItems, topRules, topNode: nodeItems[0], series: [], windowSeconds: 0, source: "current" };
 }
 
 export function counterTotal(counters: Counter[], ruleId: string): { bytes: number; packets: number } {

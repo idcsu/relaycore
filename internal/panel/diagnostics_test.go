@@ -47,6 +47,51 @@ func TestBuildRuleCounterRates(t *testing.T) {
 	}
 }
 
+func TestTrafficOverviewAccumulatesCounterDeltasAcrossReset(t *testing.T) {
+	store, actor := testUserStore(t)
+	nodeID := registerTestNode(t, store, "traffic-node")
+	rule, err := store.SaveRule(common.ForwardRule{
+		Name:       "traffic-rule",
+		NodeID:     nodeID,
+		Protocol:   "tcp",
+		ListenPort: 18080,
+		TargetHost: "127.0.0.1",
+		TargetPort: 8080,
+	}, actor, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("save rule: %v", err)
+	}
+	for _, c := range []common.RuleCounter{
+		{RuleID: rule.ID, Protocol: "tcp", Packets: 10, Bytes: 100},
+		{RuleID: rule.ID, Protocol: "tcp", Packets: 16, Bytes: 160},
+		{RuleID: rule.ID, Protocol: "tcp", Packets: 2, Bytes: 20},
+	} {
+		if _, _, err := store.UpdateHeartbeat(common.AgentHeartbeatRequest{
+			NodeID:         nodeID,
+			Hostname:       "traffic-node",
+			AgentVersion:   "test",
+			ForwardingMode: "nftables",
+			FirewallMode:   "managed",
+			Counters:       []common.RuleCounter{c},
+		}, "203.0.113.40"); err != nil {
+			t.Fatalf("heartbeat: %v", err)
+		}
+	}
+	traffic := store.TrafficOverview()
+	if traffic.Bytes != 180 || traffic.Packets != 18 {
+		t.Fatalf("unexpected traffic total: %#v", traffic)
+	}
+	if traffic.ByProtocol["tcp"] != 180 {
+		t.Fatalf("unexpected tcp total: %#v", traffic.ByProtocol)
+	}
+	if len(traffic.Nodes) != 1 || traffic.Nodes[0].Bytes != 180 {
+		t.Fatalf("unexpected node totals: %#v", traffic.Nodes)
+	}
+	if len(traffic.Rules) != 1 || traffic.Rules[0].RuleID != rule.ID || traffic.Rules[0].Bytes != 180 {
+		t.Fatalf("unexpected rule totals: %#v", traffic.Rules)
+	}
+}
+
 func TestLikelyRuleCauseNoTraffic(t *testing.T) {
 	got := likelyRuleCause(
 		common.ForwardRule{ID: "rul_test", Name: "test", Enabled: true},

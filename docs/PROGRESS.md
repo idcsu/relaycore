@@ -482,6 +482,47 @@ cd frontend && npm run build
 git diff --check
 ```
 
+### 2026-06-20：流量统计修正和 UI 对齐
+
+问题：
+
+1. 总览页直接使用当前 nftables counter 值展示累计流量。由于规则重建、Agent 重启或 nftables 表重建会让 counter 归零，累计值会偏低或跳变。
+2. 节点列表“转发”栏把 flex 样式直接加在 `td` 上，部分浏览器里标签位置偏上。
+3. 规则页状态筛选的“全部 / 启用 / 停用 / 异常”按钮在筛选区域内不够居中。
+
+改动：
+
+1. 后端新增 `traffic_totals` 持久化字段。
+   - 每次 Agent 心跳时按 rule/protocol 计算 counter 增量。
+   - 如果新 counter 小于旧 counter，按 counter 重置处理，把新值作为本轮新增。
+   - 老数据升级时，会把已有 `counters` 作为 `traffic_totals` 初始值。
+
+2. Dashboard API 新增 `traffic` 字段：
+   - 累计 bytes / packets
+   - TCP / UDP 协议占比
+   - 节点流量汇总
+   - 规则流量排行
+   - 最近 1 小时、每 5 分钟聚合的新增流量曲线
+
+3. 总览页流量面板：
+   - 优先使用 Dashboard 返回的累计流量。
+   - 增加最近 1 小时新增流量曲线。
+   - 文案说明统计口径：Panel 根据 Agent 心跳里的 counter 增量累计，不增加 Agent 采集频率，不进入转发链路。
+
+4. UI 对齐：
+   - 节点表格“转发”栏改为 `td` 内部嵌套 `.cell-badges`，避免改变表格单元格布局。
+   - `.cell-badges` 增加垂直居中。
+   - 规则页 `.rules-filter .segment` 增加居中和按钮最小宽度。
+
+验证：
+
+```bash
+PATH=/usr/local/go/bin:$PATH GOCACHE=/tmp/relaycore-go-cache go test ./...
+PATH=/usr/local/go/bin:$PATH GOCACHE=/tmp/relaycore-go-cache go vet ./...
+cd frontend && npm run build
+git diff --check
+```
+
 ## Next Recommended Steps
 
 1. Review the updated Simplified Chinese UI on the Debian preview panel and adjust spacing, wording, or workflow pain points from feedback.

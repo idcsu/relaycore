@@ -111,6 +111,43 @@ export interface DashboardResponse {
   enabled_rules?: number;
   rule_version?: number;
   findings?: Finding[];
+  traffic?: TrafficOverview;
+}
+
+export interface TrafficOverview {
+  bytes?: number;
+  packets?: number;
+  by_protocol?: { tcp?: number; udp?: number; other?: number };
+  nodes?: TrafficNodeOverview[];
+  rules?: TrafficRuleOverview[];
+  series?: TrafficSeriesPoint[];
+  window_seconds?: number;
+}
+
+export interface TrafficNodeOverview {
+  node_id: string;
+  node_name?: string;
+  bytes?: number;
+  packets?: number;
+  rule_count?: number;
+  enabled_rule_count?: number;
+}
+
+export interface TrafficRuleOverview {
+  rule_id: string;
+  rule_name?: string;
+  node_id?: string;
+  node_name?: string;
+  protocol?: Protocol | string;
+  listen_port?: number;
+  bytes?: number;
+  packets?: number;
+}
+
+export interface TrafficSeriesPoint {
+  at: string;
+  bytes?: number;
+  packets?: number;
 }
 
 export interface NodeTrend {

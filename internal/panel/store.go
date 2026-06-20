@@ -50,6 +50,7 @@ type Data struct {
 	RuleReports    map[string]common.RuleApplyReport `json:"rule_reports"`
 	MetricHistory  map[string][]NodeMetricSample     `json:"metric_history"`
 	CounterHistory map[string][]RuleCounterSample    `json:"counter_history"`
+	TrafficTotals  map[string]common.RuleCounter     `json:"traffic_totals"`
 	TargetHistory  map[string][]TargetIPSample       `json:"target_history"`
 	Events         []Event                           `json:"events"`
 	Settings       map[string]string                 `json:"settings"`
@@ -147,6 +148,42 @@ type RuleCounterRate struct {
 	BytesDelta       uint64  `json:"bytes_delta"`
 	PacketsPerSecond float64 `json:"packets_per_second"`
 	BytesPerSecond   float64 `json:"bytes_per_second"`
+}
+
+type TrafficOverview struct {
+	Bytes         uint64               `json:"bytes"`
+	Packets       uint64               `json:"packets"`
+	ByProtocol    map[string]uint64    `json:"by_protocol"`
+	Nodes         []TrafficNodeSummary `json:"nodes"`
+	Rules         []TrafficRuleSummary `json:"rules"`
+	Series        []TrafficSeriesPoint `json:"series"`
+	WindowSeconds int64                `json:"window_seconds"`
+}
+
+type TrafficNodeSummary struct {
+	NodeID           string `json:"node_id"`
+	NodeName         string `json:"node_name"`
+	Bytes            uint64 `json:"bytes"`
+	Packets          uint64 `json:"packets"`
+	RuleCount        int    `json:"rule_count"`
+	EnabledRuleCount int    `json:"enabled_rule_count"`
+}
+
+type TrafficRuleSummary struct {
+	RuleID     string `json:"rule_id"`
+	RuleName   string `json:"rule_name"`
+	NodeID     string `json:"node_id"`
+	NodeName   string `json:"node_name"`
+	Protocol   string `json:"protocol"`
+	ListenPort int    `json:"listen_port"`
+	Bytes      uint64 `json:"bytes"`
+	Packets    uint64 `json:"packets"`
+}
+
+type TrafficSeriesPoint struct {
+	At      time.Time `json:"at"`
+	Bytes   uint64    `json:"bytes"`
+	Packets uint64    `json:"packets"`
 }
 
 type NodeUpdate struct {
@@ -265,6 +302,12 @@ func (s *Store) ensureDataLocked() {
 	}
 	if s.data.CounterHistory == nil {
 		s.data.CounterHistory = map[string][]RuleCounterSample{}
+	}
+	if s.data.TrafficTotals == nil {
+		s.data.TrafficTotals = map[string]common.RuleCounter{}
+		for key, counter := range s.data.Counters {
+			s.data.TrafficTotals[key] = counter
+		}
 	}
 	if s.data.TargetHistory == nil {
 		s.data.TargetHistory = map[string][]TargetIPSample{}
@@ -998,6 +1041,11 @@ func (s *Store) deleteRuleLocked(id string) {
 			delete(s.data.Counters, k)
 		}
 	}
+	for k, c := range s.data.TrafficTotals {
+		if c.RuleID == id {
+			delete(s.data.TrafficTotals, k)
+		}
+	}
 	for k, samples := range s.data.CounterHistory {
 		if strings.HasPrefix(k, id+"|") {
 			delete(s.data.CounterHistory, k)
@@ -1043,7 +1091,9 @@ func (s *Store) UpdateHeartbeat(req common.AgentHeartbeatRequest, remoteIP strin
 	s.recordMetricHistoryLocked(req.NodeID, req.Metrics, now)
 	for _, c := range req.Counters {
 		c.UpdatedAt = now
-		s.data.Counters[c.RuleID+"|"+c.Protocol] = c
+		key := c.RuleID + "|" + c.Protocol
+		s.recordTrafficTotalLocked(key, c, now)
+		s.data.Counters[key] = c
 		s.recordCounterHistoryLocked(c, now)
 	}
 	for _, report := range req.RuleReports {
@@ -1086,6 +1136,26 @@ func (s *Store) recordCounterHistoryLocked(counter common.RuleCounter, at time.T
 		samples = samples[len(samples)-maxRuleCounterSamples:]
 	}
 	s.data.CounterHistory[key] = samples
+}
+
+func (s *Store) recordTrafficTotalLocked(key string, counter common.RuleCounter, at time.Time) {
+	prev, seen := s.data.Counters[key]
+	deltaPackets := counter.Packets
+	deltaBytes := counter.Bytes
+	if seen {
+		deltaPackets = counterDelta(prev.Packets, counter.Packets)
+		deltaBytes = counterDelta(prev.Bytes, counter.Bytes)
+	}
+	if deltaPackets == 0 && deltaBytes == 0 {
+		return
+	}
+	total := s.data.TrafficTotals[key]
+	total.RuleID = counter.RuleID
+	total.Protocol = counter.Protocol
+	total.Packets += deltaPackets
+	total.Bytes += deltaBytes
+	total.UpdatedAt = at
+	s.data.TrafficTotals[key] = total
 }
 
 func (s *Store) recordTargetHistoryLocked(report common.RuleApplyReport, at time.Time) {
@@ -1187,6 +1257,7 @@ func (s *Store) Dashboard() map[string]any {
 		"enabled_rules": enabledRules,
 		"rule_version":  s.RuleVersion(),
 		"findings":      report.Findings,
+		"traffic":       s.TrafficOverview(),
 	}
 }
 
@@ -1203,6 +1274,24 @@ func (s *Store) Counters() []common.RuleCounter {
 		}
 		return out[i].RuleID < out[j].RuleID
 	})
+	return out
+}
+
+func (s *Store) TrafficOverview() TrafficOverview {
+	nodes := s.ListNodes()
+	rules := s.ListRules()
+	_, counterHistory, _ := s.historySnapshots()
+	totals := s.trafficTotalsSnapshot()
+	return buildTrafficOverview(nodes, rules, totals, counterHistory, time.Now())
+}
+
+func (s *Store) trafficTotalsSnapshot() []common.RuleCounter {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]common.RuleCounter, 0, len(s.data.TrafficTotals))
+	for _, c := range s.data.TrafficTotals {
+		out = append(out, c)
+	}
 	return out
 }
 
@@ -1393,6 +1482,145 @@ func protocolLabel(protocol string) string {
 	default:
 		return "TCP"
 	}
+}
+
+func buildTrafficOverview(nodes []common.Node, rules []common.ForwardRule, totals []common.RuleCounter, history map[string][]RuleCounterSample, now time.Time) TrafficOverview {
+	nodeByID := map[string]common.Node{}
+	for _, n := range nodes {
+		nodeByID[n.ID] = n
+	}
+	ruleByID := map[string]common.ForwardRule{}
+	for _, r := range rules {
+		ruleByID[r.ID] = r
+	}
+	byProtocol := map[string]uint64{"tcp": 0, "udp": 0, "other": 0}
+	nodeTotals := map[string]*TrafficNodeSummary{}
+	for _, n := range nodes {
+		nodeTotals[n.ID] = &TrafficNodeSummary{NodeID: n.ID, NodeName: n.Name}
+	}
+	for _, r := range rules {
+		item := nodeTotals[r.NodeID]
+		if item == nil {
+			item = &TrafficNodeSummary{NodeID: r.NodeID, NodeName: r.NodeID}
+			nodeTotals[r.NodeID] = item
+		}
+		item.RuleCount++
+		if r.Enabled {
+			item.EnabledRuleCount++
+		}
+	}
+	ruleTotals := map[string]*TrafficRuleSummary{}
+	var bytes, packets uint64
+	for _, c := range totals {
+		bytes += c.Bytes
+		packets += c.Packets
+		proto := c.Protocol
+		if proto != "tcp" && proto != "udp" {
+			proto = "other"
+		}
+		byProtocol[proto] += c.Bytes
+		rule := ruleByID[c.RuleID]
+		node := nodeByID[rule.NodeID]
+		ruleItem := ruleTotals[c.RuleID]
+		if ruleItem == nil {
+			ruleItem = &TrafficRuleSummary{
+				RuleID:     c.RuleID,
+				RuleName:   firstNonEmpty(rule.Name, c.RuleID),
+				NodeID:     rule.NodeID,
+				NodeName:   firstNonEmpty(node.Name, rule.NodeID),
+				Protocol:   rule.Protocol,
+				ListenPort: rule.ListenPort,
+			}
+			ruleTotals[c.RuleID] = ruleItem
+		}
+		ruleItem.Bytes += c.Bytes
+		ruleItem.Packets += c.Packets
+		nodeID := rule.NodeID
+		if nodeID != "" {
+			nodeItem := nodeTotals[nodeID]
+			if nodeItem == nil {
+				nodeItem = &TrafficNodeSummary{NodeID: nodeID, NodeName: firstNonEmpty(node.Name, nodeID)}
+				nodeTotals[nodeID] = nodeItem
+			}
+			nodeItem.Bytes += c.Bytes
+			nodeItem.Packets += c.Packets
+		}
+	}
+	nodesOut := make([]TrafficNodeSummary, 0, len(nodeTotals))
+	for _, item := range nodeTotals {
+		nodesOut = append(nodesOut, *item)
+	}
+	sort.Slice(nodesOut, func(i, j int) bool {
+		if nodesOut[i].Bytes == nodesOut[j].Bytes {
+			return nodesOut[i].NodeName < nodesOut[j].NodeName
+		}
+		return nodesOut[i].Bytes > nodesOut[j].Bytes
+	})
+	rulesOut := make([]TrafficRuleSummary, 0, len(ruleTotals))
+	for _, item := range ruleTotals {
+		rulesOut = append(rulesOut, *item)
+	}
+	sort.Slice(rulesOut, func(i, j int) bool {
+		if rulesOut[i].Bytes == rulesOut[j].Bytes {
+			return rulesOut[i].RuleName < rulesOut[j].RuleName
+		}
+		return rulesOut[i].Bytes > rulesOut[j].Bytes
+	})
+	if len(rulesOut) > 5 {
+		rulesOut = rulesOut[:5]
+	}
+	return TrafficOverview{
+		Bytes:         bytes,
+		Packets:       packets,
+		ByProtocol:    byProtocol,
+		Nodes:         nodesOut,
+		Rules:         rulesOut,
+		Series:        buildTrafficSeries(history, now),
+		WindowSeconds: int64(time.Hour.Seconds()),
+	}
+}
+
+func buildTrafficSeries(history map[string][]RuleCounterSample, now time.Time) []TrafficSeriesPoint {
+	const buckets = 12
+	bucketSize := 5 * time.Minute
+	start := now.Add(-time.Duration(buckets-1) * bucketSize).Truncate(bucketSize)
+	out := make([]TrafficSeriesPoint, buckets)
+	bucketByUnix := map[int64]int{}
+	for i := 0; i < buckets; i++ {
+		at := start.Add(time.Duration(i) * bucketSize)
+		out[i] = TrafficSeriesPoint{At: at}
+		bucketByUnix[at.Unix()] = i
+	}
+	cutoff := start.Add(-bucketSize)
+	for _, samples := range history {
+		if len(samples) < 2 {
+			continue
+		}
+		for i := 1; i < len(samples); i++ {
+			prev := samples[i-1]
+			current := samples[i]
+			if current.At.Before(cutoff) {
+				continue
+			}
+			bucketUnix := current.At.Truncate(bucketSize).Unix()
+			idx, ok := bucketByUnix[bucketUnix]
+			if !ok {
+				continue
+			}
+			out[idx].Bytes += counterDelta(prev.Bytes, current.Bytes)
+			out[idx].Packets += counterDelta(prev.Packets, current.Packets)
+		}
+	}
+	return out
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return "-"
 }
 
 func buildNodeTrend(samples []NodeMetricSample, now time.Time) NodeTrend {

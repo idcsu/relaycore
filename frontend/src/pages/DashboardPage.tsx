@@ -4,7 +4,7 @@ import { EmptyState, FindingList, HelperCard, Metric, SectionHead, Spinner } fro
 import { NodeManager } from "../components/NodeManager";
 import { TrafficPanel } from "../components/TrafficPanel";
 import { isAdminRole } from "../lib/labels";
-import { trafficSummary } from "../lib/traffic";
+import { trafficSummary, trafficSummaryFromOverview } from "../lib/traffic";
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -22,7 +22,7 @@ export function DashboardPage() {
   const ruleList = rules.data?.items || [];
   const counters = rules.data?.counters || [];
   const reports = rules.data?.reports || [];
-  const traffic = trafficSummary(counters, ruleList, nodeList);
+  const traffic = trafficSummaryFromOverview(d.traffic, nodeList, ruleList) || trafficSummary(counters, ruleList, nodeList);
 
   return (
     <>
