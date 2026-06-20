@@ -65,6 +65,7 @@ const EVENT_ACTIONS: Record<string, string> = {
   "user.update": "更新用户",
   "user.reset_password": "重置密码",
   "node_token.create": "生成节点接入 Token",
+  "node_token.delete": "删除节点接入记录",
   "node.register": "节点注册",
   "node.update": "更新节点",
   "node.delete": "删除节点",
@@ -105,6 +106,7 @@ export function eventDetailText(detail?: string): string {
   }
   if (text === "password reset") return "密码已重置";
   if (text === "created node token") return "生成节点接入 Token";
+  if (text === "deleted unused node token") return "删除未绑定的节点接入记录";
   if (text === "agent registered") return "Agent 注册成功";
   if (text === "saved forwarding rule") return "保存转发规则";
   if (text === "deleted forwarding rule") return "删除转发规则";

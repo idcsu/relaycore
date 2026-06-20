@@ -80,6 +80,7 @@ func (s *Server) ListenAndServe() error {
 	mux.HandleFunc("/api/nodes", s.requireAuth(s.handleNodes))
 	mux.HandleFunc("/api/nodes/", s.requireAuth(s.handleNodeByID))
 	mux.HandleFunc("/api/node-tokens", s.requireAuth(s.handleNodeTokens))
+	mux.HandleFunc("/api/node-tokens/", s.requireAuth(s.handleNodeTokenByID))
 	mux.HandleFunc("/api/rules", s.requireAuth(s.handleRules))
 	mux.HandleFunc("/api/rules/", s.requireAuth(s.handleRuleByID))
 	mux.HandleFunc("/api/users", s.requireAuth(s.handleUsers))
@@ -363,6 +364,27 @@ func (s *Server) handleNodeTokens(w http.ResponseWriter, r *http.Request, u comm
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func (s *Server) handleNodeTokenByID(w http.ResponseWriter, r *http.Request, u common.User) {
+	if !isAdmin(u) {
+		writeError(w, http.StatusForbidden, "permission denied")
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/api/node-tokens/")
+	if id == "" {
+		writeError(w, http.StatusNotFound, "node token not found")
+		return
+	}
+	if r.Method != http.MethodDelete {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if err := s.store.DeleteNodeToken(id, u, realIP(r)); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
 }
 
 func (s *Server) handleRules(w http.ResponseWriter, r *http.Request, u common.User) {

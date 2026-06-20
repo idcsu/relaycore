@@ -2,8 +2,10 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { queryKeys, useTokens } from "../api/hooks";
+import type { NodeToken } from "../api/types";
 import { useToast } from "../app/ToastContext";
-import { CodeBox, EmptyState, FieldHelp, HelperCard, Spinner } from "../components/ui";
+import { Badge, CodeBox, EmptyState, FieldHelp, HelperCard, Spinner } from "../components/ui";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Modal } from "../components/Modal";
 import { PageActions } from "../components/PageActions";
 import { formatTime } from "../lib/format";
@@ -18,6 +20,7 @@ export function TokensPage() {
   const tokensQuery = useTokens(true);
   const [formOpen, setFormOpen] = useState(false);
   const [command, setCommand] = useState<string | null>(null);
+  const [deleteTokenId, setDeleteTokenId] = useState<string | null>(null);
 
   const createMutation = useMutation({
     mutationFn: (payload: { name: string; hours: number }) =>
@@ -31,6 +34,19 @@ export function TokensPage() {
     onError: (err: Error) => toast(err.message, "danger"),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api(`/api/node-tokens/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    onSuccess: (_data, id) => {
+      queryClient.setQueryData(queryKeys.tokens, (old: { items?: NodeToken[] } | undefined) =>
+        old ? { ...old, items: (old.items || []).filter((t) => t.id !== id) } : old,
+      );
+      queryClient.invalidateQueries({ queryKey: queryKeys.tokens });
+      setDeleteTokenId(null);
+      toast("接入记录已删除", "ok");
+    },
+    onError: (err: Error) => toast(err.message, "danger"),
+  });
+
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
@@ -39,6 +55,7 @@ export function TokensPage() {
 
   if (tokensQuery.isLoading) return <Spinner />;
   const tokens = tokensQuery.data?.items || [];
+  const deleteToken = tokens.find((t) => t.id === deleteTokenId) || null;
 
   return (
     <>
@@ -75,19 +92,33 @@ export function TokensPage() {
                 <th>使用</th>
                 <th>过期时间</th>
                 <th>节点</th>
+                <th>状态</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
-              {tokens.map((t, idx) => (
-                <tr key={idx}>
-                  <td>{t.name}</td>
-                  <td>
-                    {t.used_count} / {t.max_uses}
-                  </td>
-                  <td>{formatTime(t.expires_at)}</td>
-                  <td className="mono">{t.used_by_node || "-"}</td>
-                </tr>
-              ))}
+              {tokens.map((t) => {
+                const bound = Boolean(t.used_by_node);
+                return (
+                  <tr key={t.id}>
+                    <td>{t.name}</td>
+                    <td>
+                      {t.used_count} / {t.max_uses}
+                    </td>
+                    <td>{formatTime(t.expires_at)}</td>
+                    <td className="mono">{t.used_by_node || "-"}</td>
+                    <td>{bound ? <Badge tone="ok">已绑定节点</Badge> : <Badge tone="warn">未绑定</Badge>}</td>
+                    <td>
+                      <div className="row-actions">
+                        <button className="btn danger" type="button" disabled={bound} onClick={() => setDeleteTokenId(t.id)}>
+                          删除记录
+                        </button>
+                      </div>
+                      {bound && <div className="muted">已成功接入的记录保留作为审计。</div>}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -127,6 +158,18 @@ export function TokensPage() {
             </div>
           </form>
         </Modal>
+      )}
+
+      {deleteToken && (
+        <ConfirmDialog
+          title="删除接入记录"
+          detail={`确认删除“${deleteToken.name}”？这只会删除未绑定节点的接入记录，不会影响已经在线的节点。`}
+          confirmText="删除记录"
+          danger
+          loading={deleteMutation.isPending}
+          onConfirm={() => deleteMutation.mutate(deleteToken.id)}
+          onClose={() => setDeleteTokenId(null)}
+        />
       )}
     </>
   );

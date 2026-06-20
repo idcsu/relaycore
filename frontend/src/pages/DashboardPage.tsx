@@ -22,7 +22,7 @@ export function DashboardPage() {
   const ruleList = rules.data?.items || [];
   const counters = rules.data?.counters || [];
   const reports = rules.data?.reports || [];
-  const traffic = trafficSummary(counters, ruleList);
+  const traffic = trafficSummary(counters, ruleList, nodeList);
 
   return (
     <>

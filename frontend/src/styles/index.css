@@ -1338,6 +1338,34 @@ tr:last-child td {
   font-size: 12px;
 }
 
+.traffic-insights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.traffic-insights > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.traffic-insights span,
+.traffic-insights em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.traffic-insights strong {
+  overflow-wrap: anywhere;
+  font-size: 18px;
+}
+
 .traffic-split {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1360,7 +1388,40 @@ tr:last-child td {
   gap: 10px;
 }
 
+.traffic-section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.traffic-section-title strong {
+  font-size: 15px;
+}
+
+.traffic-section-title span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.traffic-node-list {
+  display: grid;
+  gap: 10px;
+}
+
 .traffic-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(170px, 0.9fr) minmax(160px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.traffic-node-row {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(170px, 0.9fr) minmax(160px, 1fr) auto;
@@ -1374,11 +1435,15 @@ tr:last-child td {
 
 .traffic-row strong,
 .traffic-row span,
-.traffic-row .traffic-value {
+.traffic-row .traffic-value,
+.traffic-node-row strong,
+.traffic-node-row span,
+.traffic-node-row .traffic-value {
   overflow-wrap: anywhere;
 }
 
-.traffic-row span {
+.traffic-row span,
+.traffic-node-row span {
   display: block;
   margin-top: 3px;
   color: var(--muted);
@@ -1386,6 +1451,74 @@ tr:last-child td {
 }
 
 /* ---------- rule cards ---------- */
+.rules-filter {
+  margin-bottom: 16px;
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(160px, 220px) minmax(240px, auto) auto;
+  align-items: end;
+  gap: 14px;
+}
+
+.rules-search {
+  min-width: 240px;
+}
+
+.rules-filter-count {
+  min-width: 92px;
+  min-height: 42px;
+  display: grid;
+  align-content: center;
+  justify-items: end;
+  padding: 6px 0;
+}
+
+.rules-filter-count strong {
+  font-size: 18px;
+}
+
+.rules-filter-count span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.grouped-rule-list {
+  display: grid;
+  gap: 18px;
+}
+
+.rule-group {
+  display: grid;
+  gap: 10px;
+}
+
+.rule-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.rule-group-head strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+}
+
+.rule-group-head span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.rule-group-head b {
+  white-space: nowrap;
+  color: var(--blue);
+  font-size: 13px;
+}
+
 .rule-list {
   display: grid;
   gap: 14px;
@@ -1585,12 +1718,23 @@ tr:last-child td {
   .grid.cols-3 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .rules-filter {
+    grid-template-columns: minmax(0, 1fr) minmax(160px, 220px);
+  }
+  .rules-filter .field:last-of-type,
+  .rules-filter-count {
+    grid-column: 1 / -1;
+  }
+  .rules-filter-count {
+    justify-items: start;
+  }
   .detail-grid,
   .metric-strip,
   .rule-meta {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .traffic-row {
+  .traffic-row,
+  .traffic-node-row {
     grid-template-columns: minmax(0, 1fr);
   }
   .event-filter {
@@ -1648,9 +1792,23 @@ tr:last-child td {
   .mini-table,
   .metric-strip,
   .rule-meta,
+  .rules-filter,
+  .traffic-insights,
   .traffic-split,
   .totp-setup {
     grid-template-columns: 1fr;
+  }
+  .rules-search {
+    min-width: 0;
+  }
+  .rules-filter .field:last-of-type,
+  .rules-filter-count {
+    grid-column: auto;
+  }
+  .rule-group-head,
+  .traffic-section-title {
+    align-items: flex-start;
+    flex-direction: column;
   }
   .rule-main {
     flex-direction: column;

@@ -822,6 +822,21 @@ func (s *Store) ListNodeTokens() []common.NodeToken {
 	return out
 }
 
+func (s *Store) DeleteNodeToken(id string, actor common.User, ip string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tok, ok := s.data.NodeTokens[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if tok.UsedByNode != "" {
+		return fmt.Errorf("%w: 已绑定节点的接入记录不能删除", ErrBadRequest)
+	}
+	delete(s.data.NodeTokens, id)
+	s.addEventLocked(actor.ID, "node_token.delete", "node-token:"+id, ip, "deleted unused node token")
+	return s.saveLocked()
+}
+
 func (s *Store) ConsumeNodeToken(plain string) (common.NodeToken, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

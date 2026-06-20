@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { queryKeys, useDiagnostics, useNodes, useRules, useUsers } from "../api/hooks";
-import type { Rule } from "../api/types";
+import type { Rule, RuleReport } from "../api/types";
 import { useAuth } from "../app/AuthContext";
 import { useToast } from "../app/ToastContext";
 import { EmptyState, HelperCard, Spinner } from "../components/ui";
@@ -11,7 +11,36 @@ import { RuleCard } from "../components/RuleCard";
 import { RuleForm, type RulePayload } from "../components/RuleForm";
 import { RuleDrawer } from "../components/RuleDrawer";
 import { ConfirmDialog } from "../components/ConfirmDialog";
-import { isAdminRole } from "../lib/labels";
+import { applyStateText, isAdminRole, protocolText } from "../lib/labels";
+
+type RuleGroupMode = "node" | "status" | "protocol" | "none";
+type RuleStatusFilter = "all" | "enabled" | "disabled" | "error";
+
+interface RuleGroup {
+  key: string;
+  title: string;
+  detail: string;
+  rules: Rule[];
+}
+
+function ruleApplyState(rule: Rule, report?: RuleReport): string {
+  return rule.last_apply_state || report?.state || "pending";
+}
+
+function ruleGroupTitle(rule: Rule, mode: RuleGroupMode, nodeName: string, report?: RuleReport): { key: string; title: string; detail: string } {
+  if (mode === "status") {
+    if (!rule.enabled) return { key: "disabled", title: "已停用", detail: "这些规则不会下发到节点" };
+    const state = ruleApplyState(rule, report);
+    return { key: state, title: applyStateText(state), detail: "按 Agent 最近一次应用结果分组" };
+  }
+  if (mode === "protocol") {
+    return { key: rule.protocol, title: protocolText(rule.protocol), detail: "按 TCP、UDP 或双协议分组" };
+  }
+  if (mode === "none") {
+    return { key: "all", title: "全部规则", detail: "按创建时间展示" };
+  }
+  return { key: rule.node_id || "unknown", title: nodeName, detail: "同一节点上的规则放在一起" };
+}
 
 export function RulesPage() {
   const { user } = useAuth();
@@ -27,6 +56,9 @@ export function RulesPage() {
   const [editingRule, setEditingRule] = useState<Rule | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deleteRuleId, setDeleteRuleId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<RuleStatusFilter>("all");
+  const [groupMode, setGroupMode] = useState<RuleGroupMode>("node");
   const diagnosticsQuery = useDiagnostics(selectedId != null);
 
   const invalidate = () => {
@@ -87,6 +119,46 @@ export function RulesPage() {
     return users.find((u) => u.id === id)?.username || id;
   };
 
+  const reportByRule = new Map(reports.map((r) => [r.rule_id, r]));
+  const nodeName = (id?: string) => nodes.find((n) => n.id === id)?.name || id || "未知节点";
+  const keyword = search.trim().toLowerCase();
+  const filteredRules = rules.filter((rule) => {
+    const report = reportByRule.get(rule.id);
+    const state = ruleApplyState(rule, report);
+    if (statusFilter === "enabled" && !rule.enabled) return false;
+    if (statusFilter === "disabled" && rule.enabled) return false;
+    if (statusFilter === "error" && state !== "error" && !rule.last_error) return false;
+    if (!keyword) return true;
+    const haystack = [
+      rule.name,
+      rule.description,
+      protocolText(rule.protocol),
+      String(rule.listen_port),
+      rule.target_host,
+      String(rule.target_port),
+      nodeName(rule.node_id),
+      ownerName(rule.user_id),
+      applyStateText(state),
+      report?.message,
+      rule.last_error,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(keyword);
+  });
+  const groupedRules = (() => {
+    const groups = new Map<string, RuleGroup>();
+    for (const rule of filteredRules) {
+      const report = reportByRule.get(rule.id);
+      const meta = ruleGroupTitle(rule, groupMode, nodeName(rule.node_id), report);
+      const group = groups.get(meta.key) || { ...meta, rules: [] };
+      group.rules.push(rule);
+      groups.set(meta.key, group);
+    }
+    return [...groups.values()];
+  })();
+
   const selectedRule = rules.find((r) => r.id === selectedId) || null;
   const deleteRule = rules.find((r) => r.id === deleteRuleId) || null;
   const selectedNode = selectedRule ? nodes.find((n) => n.id === selectedRule.node_id) : undefined;
@@ -121,26 +193,96 @@ export function RulesPage() {
       />
 
       {rules.length ? (
-        <div className="rule-list">
-          {rules.map((rule) => (
-            <RuleCard
-              key={rule.id}
-              rule={rule}
-              node={nodes.find((n) => n.id === rule.node_id)}
-              counters={counters}
-              report={reports.find((r) => r.rule_id === rule.id)}
-              ownerName={ownerName(rule.user_id)}
-              isAdmin={admin}
-              onOpen={() => setSelectedId(rule.id)}
-              onEdit={() => {
-                setEditingRule(rule);
-                setFormOpen(true);
-              }}
-              onToggle={() => toggleMutation.mutate(rule)}
-              onDelete={() => setDeleteRuleId(rule.id)}
+        <>
+          <div className="rules-filter panel pad">
+            <label className="field rules-search">
+              搜索规则
+              <input
+                className="input"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="输入名称、端口、目标地址、节点名或归属用户"
+              />
+            </label>
+            <label className="field">
+              分组方式
+              <select className="select" value={groupMode} onChange={(e) => setGroupMode(e.target.value as RuleGroupMode)}>
+                <option value="node">按节点分组</option>
+                <option value="status">按状态分组</option>
+                <option value="protocol">按协议分组</option>
+                <option value="none">不分组</option>
+              </select>
+            </label>
+            <div className="field">
+              状态筛选
+              <div className="segment">
+                {[
+                  ["all", "全部"],
+                  ["enabled", "启用"],
+                  ["disabled", "停用"],
+                  ["error", "异常"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    className={statusFilter === value ? "active" : ""}
+                    type="button"
+                    onClick={() => setStatusFilter(value as RuleStatusFilter)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="rules-filter-count">
+              <strong>
+                {filteredRules.length}/{rules.length}
+              </strong>
+              <span>条规则</span>
+            </div>
+          </div>
+
+          {filteredRules.length ? (
+            <div className="grouped-rule-list">
+              {groupedRules.map((group) => (
+                <section className="rule-group" key={group.key}>
+                  <div className="rule-group-head">
+                    <div>
+                      <strong>{group.title}</strong>
+                      <span>{group.detail}</span>
+                    </div>
+                    <b>{group.rules.length} 条</b>
+                  </div>
+                  <div className="rule-list">
+                    {group.rules.map((rule) => (
+                      <RuleCard
+                        key={rule.id}
+                        rule={rule}
+                        node={nodes.find((n) => n.id === rule.node_id)}
+                        counters={counters}
+                        report={reportByRule.get(rule.id)}
+                        ownerName={ownerName(rule.user_id)}
+                        isAdmin={admin}
+                        onOpen={() => setSelectedId(rule.id)}
+                        onEdit={() => {
+                          setEditingRule(rule);
+                          setFormOpen(true);
+                        }}
+                        onToggle={() => toggleMutation.mutate(rule)}
+                        onDelete={() => setDeleteRuleId(rule.id)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="没有匹配的规则"
+              detail="换一个关键词，或者把状态筛选切回“全部”。"
+              action="可以搜索规则名称、监听端口、目标地址、节点名和归属用户。"
             />
-          ))}
-        </div>
+          )}
+        </>
       ) : (
         <EmptyState
           title="还没有转发规则"

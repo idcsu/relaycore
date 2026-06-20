@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"errors"
 	"testing"
 
 	"relaycore/internal/common"
@@ -75,5 +76,39 @@ func TestNodeUpdateAndDelete(t *testing.T) {
 		if r.ID == rule.ID {
 			t.Fatalf("rule for deleted node should be removed")
 		}
+	}
+}
+
+func TestDeleteUnusedNodeToken(t *testing.T) {
+	store, actor := testUserStore(t)
+	unused, err := store.CreateNodeToken("unused-node", 24)
+	if err != nil {
+		t.Fatalf("create unused node token: %v", err)
+	}
+	if err := store.DeleteNodeToken(unused.ID, actor, "127.0.0.1"); err != nil {
+		t.Fatalf("delete unused token: %v", err)
+	}
+	for _, tok := range store.ListNodeTokens() {
+		if tok.ID == unused.ID {
+			t.Fatalf("unused token should be deleted")
+		}
+	}
+
+	used, err := store.CreateNodeToken("used-node", 24)
+	if err != nil {
+		t.Fatalf("create used node token: %v", err)
+	}
+	if _, err := store.RegisterNode(common.AgentRegisterRequest{
+		Token:        used.PlainToken,
+		Name:         "used-node",
+		Hostname:     "used-node",
+		OS:           "linux",
+		Arch:         "amd64",
+		AgentVersion: "test",
+	}, "203.0.113.30"); err != nil {
+		t.Fatalf("register node: %v", err)
+	}
+	if err := store.DeleteNodeToken(used.ID, actor, "127.0.0.1"); !errors.Is(err, ErrBadRequest) {
+		t.Fatalf("bound token should be rejected, got %v", err)
 	}
 }

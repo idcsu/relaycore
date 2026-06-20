@@ -446,6 +446,42 @@ Last rule-loop validation result:
 - 本地开发不传 VERSION 时默认显示 `dev`。
 - 以后发版只需 `git tag vX.Y.Z && git push origin vX.Y.Z`，不再需要手动改代码。
 
+### 2026-06-20：前端易用性增强
+
+本次目标：
+
+1. 节点接入记录可清理，避免未绑定节点的一次性接入记录长期堆在页面里。
+2. 转发规则数量变多后更容易查找和管理。
+3. 总览页增加按节点维度的流量分析，但不增加 Agent 采集频率，不影响转发性能。
+
+改动：
+
+1. 节点接入：
+   - 新增 `DELETE /api/node-tokens/{id}`。
+   - Store 层新增 `DeleteNodeToken`，只允许删除未绑定节点的接入记录。
+   - 节点接入页增加“删除记录”按钮和自定义确认弹窗。
+   - 审计日志增加 `node_token.delete` 中文动作和详情映射。
+
+2. 转发规则：
+   - 新增规则搜索框，支持按规则名称、监听端口、目标地址、节点名、归属用户和应用状态搜索。
+   - 新增状态筛选：全部、启用、停用、异常。
+   - 新增分组方式：按节点、按状态、按协议、不分组。
+   - 分组标题显示规则数量和简短说明，规则多时更容易定位。
+
+3. 总览流量：
+   - `trafficSummary` 从原来的规则维度扩展到节点维度。
+   - 总览页显示总使用流量、有流量节点数、最高流量节点、节点流量占比、规则流量排行。
+   - 数据来源仍是 Agent 低频上报的 nftables counter，只在 Panel/浏览器侧聚合展示。
+
+验证：
+
+```bash
+PATH=/usr/local/go/bin:$PATH GOCACHE=/tmp/relaycore-go-cache go test ./...
+PATH=/usr/local/go/bin:$PATH GOCACHE=/tmp/relaycore-go-cache go vet ./...
+cd frontend && npm run build
+git diff --check
+```
+
 ## Next Recommended Steps
 
 1. Review the updated Simplified Chinese UI on the Debian preview panel and adjust spacing, wording, or workflow pain points from feedback.

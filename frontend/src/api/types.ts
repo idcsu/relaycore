@@ -176,6 +176,7 @@ export interface DiagnosticsResponse {
 }
 
 export interface NodeToken {
+  id: string;
   name: string;
   used_count?: number;
   max_uses?: number;
